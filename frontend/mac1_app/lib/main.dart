@@ -111,7 +111,7 @@ class MyApp extends StatelessWidget {
             );
           case '/chatbot':
             final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => ChatbotPage(userId: userId));
+            return MaterialPageRoute(builder: (_) => ChatScreen(userId: userId));
           case '/adminDashboard':
             return MaterialPageRoute(builder: (_) => AdminDashboard());
           default:

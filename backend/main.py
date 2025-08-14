@@ -10,6 +10,13 @@ import traceback
 from fastapi import Request
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql import label
+from sqlalchemy import desc
+
+from chatbot_orchestrator import router as convai_router
+app.include_router(convai_router)
+
 
 INTENTS = {
     "plumber": ["leaky pipe", "water leakage", "clogged drain", "fix tap"],
@@ -646,84 +653,173 @@ class NotificationData(BaseModel):
     user_id: int
     message: str
 
-@app.post("/chatbot/")
-async def chatbot(request: Request):
-    data = await request.json()
-    message = data.get("message")
-    user_lat = float(data.get("lat"))
-    user_lon = float(data.get("lon"))
 
-    # Process intent
-    msg_vec = vectorizer.transform([message])
-    similarity = cosine_similarity(msg_vec, intent_vectors).flatten()
-    best_idx = similarity.argmax()
-    detected_intent = intent_labels[best_idx]
-    
-    # Reuse your worker-fetch logic
-    db = SessionLocal()
-    workers = (
-        db.query(Worker, User)
-        .join(User, Worker.user_id == User.id)
-        .filter(Worker.skill == detected_intent)
-        .all()
-    )
-    results = []
-    for worker, user in workers:
-        distance = calc_distance(user_lat, user_lon, worker.latitude, worker.longitude)
-        avg_rating = (
-            db.query(func.avg(Rating.rating))
-            .filter(Rating.worker_id == worker.user_id)
-            .scalar()
-        ) or 0.0
 
-        results.append({
-            "worker_id": worker.user_id,
-            "name": user.name,
-            "hourly_rate": worker.hourly_rate,
-            "rating": round(avg_rating, 2),
-            "distance": round(distance, 2)
-        })
-    results.sort(key=lambda x: x["distance"])
-    return {
-        "intent": detected_intent,
-        "workers": results
-    }
-
+# --- USERS ---
 @app.get("/admin/users")
-def get_all_users():
+def get_all_users(
+    search: str = "",
+    role: str = "",
+    page: int = 1,
+    limit: int = 20
+):
     db = SessionLocal()
-    users = db.query(User).all()
-    db.close()
-    return [{"id": u.id, "name": u.name, "email": u.email, "role": u.role} for u in users]
+    try:
+        q = db.query(User)
 
+        if search:
+            term = f"%{search.lower()}%"
+            q = q.filter(
+                func.lower(User.name).like(term) |
+                func.lower(User.email).like(term)
+            )
+        if role:
+            q = q.filter(User.role == role)
+
+        total = q.count()
+        items = (
+            q.order_by(User.id.desc())
+             .offset((page - 1) * limit)
+             .limit(limit)
+             .all()
+        )
+        data = [{"id": u.id, "name": u.name, "email": u.email, "role": u.role} for u in items]
+
+        return {
+            "items": data,
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "has_next": page * limit < total
+        }
+    finally:
+        db.close()
+
+# --- WORKERS ---
 @app.get("/admin/workers")
-def get_all_workers():
+def get_all_workers(
+    search: str = "",
+    skill: str = "",
+    page: int = 1,
+    limit: int = 20,
+    sort_by: str = "rating",        # rating | name
+    sort_dir: str = "desc"          # asc | desc
+):
     db = SessionLocal()
-    workers = (
-        db.query(Worker, User)
-        .join(User, Worker.user_id == User.id)
-        .all()
-    )
-    result = []
-    for worker, user in workers:
-        avg_rating = db.query(func.avg(Rating.rating)).filter(Rating.worker_id == worker.user_id).scalar() or 0.0
-        result.append({
-            "name": user.name,
-            "skill": worker.skill,
-            "experience": worker.experience,
-            "hourly_rate": worker.hourly_rate,
-            "rating": round(avg_rating, 2)
-        })
-    db.close()
-    return result
+    try:
+        # avg rating per worker as subquery
+        rating_subq = (
+            db.query(
+                Rating.worker_id.label("wid"),
+                func.avg(Rating.rating).label("avg_rating")
+            )
+            .group_by(Rating.worker_id)
+            .subquery()
+        )
 
+        # base query
+        q = (
+            db.query(Worker, User, rating_subq.c.avg_rating)
+              .join(User, Worker.user_id == User.id)
+              .outerjoin(rating_subq, rating_subq.c.wid == Worker.user_id)
+        )
+
+        # filters
+        if search:
+            term = f"%{search.lower()}%"
+            q = q.filter(func.lower(User.name).like(term))
+        if skill:
+            q = q.filter(Worker.skill == skill.lower())
+
+        total = q.count()
+
+        # sorting
+        sort_by = (sort_by or "rating").lower()
+        sort_dir = (sort_dir or "desc").lower()
+        asc = sort_dir == "asc"
+
+        if sort_by == "name":
+            order_col = func.lower(User.name)
+        else:  # default to rating
+            # nulls first/last handling: treat NULL as 0
+            order_col = func.coalesce(rating_subq.c.avg_rating, 0.0)
+
+        q = q.order_by(order_col.asc() if asc else order_col.desc())
+
+        # paging
+        rows = (
+            q.offset((page - 1) * limit)
+             .limit(limit)
+             .all()
+        )
+
+        items = []
+        for w, u, avg_rating in rows:
+            items.append({
+                "id": w.user_id,
+                "name": u.name,
+                "skill": w.skill,
+                "experience": w.experience,
+                "hourly_rate": w.hourly_rate,
+                "rating": round(float(avg_rating or 0.0), 2),
+            })
+
+        return {
+            "items": items,
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "has_next": page * limit < total
+        }
+    finally:
+        db.close()
+
+# --- BOOKINGS ---
 @app.get("/admin/bookings")
-def get_all_bookings():
+@app.get("/admin/bookings")
+def get_all_bookings(
+    search: str = "",
+    status: str = "",
+    page: int = 1,
+    limit: int = 20,
+    sort_by: str = "date",          # date | status | title
+    sort_dir: str = "desc"          # asc | desc
+):
     db = SessionLocal()
-    bookings = db.query(Booking).all()
-    result = []
-    for b in bookings:
-        result.append({
+    try:
+        q = db.query(Booking)
+
+        if search:
+            term = f"%{search.lower()}%"
+            q = q.filter(func.lower(Booking.job_title).like(term))
+        if status:
+            q = q.filter(Booking.status == status)
+
+        total = q.count()
+
+        sort_by = (sort_by or "date").lower()
+        sort_dir = (sort_dir or "desc").lower()
+        asc = sort_dir == "asc"
+
+        if sort_by == "status":
+            order_cols = [func.lower(Booking.status)]
+        elif sort_by in ("title", "job_title"):
+            order_cols = [func.lower(Booking.job_title)]
+        else:
+            # date + time
+            order_cols = [Booking.date, Booking.time]
+
+        # apply ordering
+        for i, col in enumerate(order_cols):
+            q = q.order_by(col.asc() if asc else col.desc())
+
+        rows = (
+            q.offset((page - 1) * limit)
+             .limit(limit)
+             .all()
+        )
+
+        items = [{
             "id": b.id,
             "job_title": b.job_title,
             "status": b.status,
@@ -731,9 +827,17 @@ def get_all_bookings():
             "worker_id": b.worker_id,
             "date": b.date.strftime("%Y-%m-%d"),
             "time": b.time.strftime("%H:%M"),
-        })
-    db.close()
-    return result
+        } for b in rows]
+
+        return {
+            "items": items,
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "has_next": page * limit < total
+        }
+    finally:
+        db.close()
 
 @app.get("/admin/revenue")
 def get_total_revenue():
