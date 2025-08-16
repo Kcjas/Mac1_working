@@ -154,7 +154,13 @@ class _CustomerhpState extends State<Customerhp> {
                           ),
                           const SizedBox(height: 20),
                           ElevatedButton.icon(
-                            onPressed: () => Navigator.pushNamed(context, '/chatbot',arguments: widget.userId),
+                            onPressed: () => Navigator.pushNamed(context, '/chatbot',arguments: {
+                              'userId': widget.userId,
+                              'customerLat': _currentPosition!.latitude ?? "N/A",
+                              'customerLon': _currentPosition!.longitude?? "N/A",
+                              'customerAddress': _address ?? "Unknown",
+                            }),
+                            
                             icon: const Icon(Icons.question_answer),
                             label: const Text("Need help identifying the problem?"),
                             style: ElevatedButton.styleFrom(

@@ -1,93 +1,61 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/acceptedworker.dart';
 import '../services/api_service.dart';
 import 'booking.dart';
+import 'package:http/http.dart' as http;
 
-class AcceptedWorkersFullPage extends StatefulWidget {
+class AcceptedWorkersFull extends StatefulWidget {
   final int userId;
-  const AcceptedWorkersFullPage({Key? key, required this.userId}) : super(key: key);
+  const AcceptedWorkersFull({super.key, required this.userId});
 
   @override
-  State<AcceptedWorkersFullPage> createState() => _AcceptedWorkersFullPageState();
+  State<AcceptedWorkersFull> createState() => _AcceptedWorkersFullState();
 }
 
-class _AcceptedWorkersFullPageState extends State<AcceptedWorkersFullPage> {
-  late Future<List<AcceptedWorker>> _futureWorkers;
+class _AcceptedWorkersFullState extends State<AcceptedWorkersFull> {
+  late Future<List<dynamic>> _future;
 
   @override
   void initState() {
     super.initState();
-    _futureWorkers = ApiService().fetchAcceptedWorkers(widget.userId);
+    _future = fetchAccepted(widget.userId);
+  }
+
+  Future<List<dynamic>> fetchAccepted(int userId) async {
+    final url = Uri.parse('http://10.0.2.2:8000/customer/$userId/accepted-workers');
+    print('Hitting: $url');
+    final res = await http.get(url);
+    print('Status: ${res.statusCode}');
+    print('Body: ${res.body}');
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as List<dynamic>;
+    } else {
+      throw Exception('Failed: ${res.statusCode} ${res.body}');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('All Accepted Workers')),
-      body: FutureBuilder<List<AcceptedWorker>>(
-        future: _futureWorkers,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          final workers = snapshot.data ?? [];
-          if (workers.isEmpty) {
-            return const Center(child: Text('No accepted workers yet.'));
-          }
-
-          return ListView.builder(
-            itemCount: workers.length,
-            itemBuilder: (context, i) {
-              final w = workers[i];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(w.name,
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text('Skill: ${w.skill}'),
-                      Text('Rate: ₹${w.hourlyRate}/hr'),
-                      Text('Rating: ${w.rating}'),
-                      Text('Distance: ${w.distance} km'),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => BookingPage(
-                                customerId: widget.userId,
-                                workerId: w.workerId,
-                                workerName: w.name,
-                                skill: w.skill,
-                                hourlyRate: w.hourlyRate.toDouble(),
-                                rating: w.rating.toDouble(),
-                                customerLat: w.customerLat,
-                                customerLon: w.customerLon,
-                                date: w.date,
-                                time: w.time
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text("Book Now"),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
+    return FutureBuilder<List<dynamic>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
+        final items = snapshot.data!;
+        if (items.isEmpty) return const Center(child: Text('No accepted offers yet.'));
+        return ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (_, i) {
+            final w = items[i] as Map<String, dynamic>;
+            return ListTile(
+              title: Text('${w["name"]} • ${w["skill"]}'),
+              subtitle: Text('⭐ ${w["rating"]}  ${w["distance"] ?? "-"} km  ${w["date"]} ${w["time"]}'),
+              trailing: Text('\$${w["hourly_rate"]}/hr'),
+            );
+          },
+        );
+      },
     );
   }
 }

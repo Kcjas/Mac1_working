@@ -4,6 +4,8 @@ import '../models/WorkerProfile.dart';
 import '../models/CustomerProfile.dart';
 import '../models/acceptedworker.dart';
 
+const String BASE_URL = 'http://192.168.1.5:8000';
+
 class ApiService {
   static Future<Workerprofile> fetchWorkerdata(int userId) async{
      final response = await http.get(Uri.parse("http://192.168.1.2:8000/worker_profile/$userId"));
@@ -38,7 +40,7 @@ class ApiService {
   }
 
   static Future<Customerprofile> fetchCustomerProfile(int userId) async {
-    final response = await http.get(Uri.parse("http://192.168.1.2:8000/customer_profile/$userId"));
+    final response = await http.get(Uri.parse("http://192.168.1.2:8000/customer/profile/$userId"));
   
     if (response.statusCode == 200) {
       return Customerprofile.fromJson(json.decode(response.body));

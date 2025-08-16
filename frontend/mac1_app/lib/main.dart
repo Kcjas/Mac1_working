@@ -90,7 +90,7 @@ class MyApp extends StatelessWidget {
           case '/acceptedWorkerList':
             final userId = settings.arguments as int;
             return MaterialPageRoute(
-              builder: (_) => AcceptedWorkersFullPage(userId: userId),
+              builder: (_) => AcceptedWorkersFull(userId: userId),
             );
           case '/completedJobs':
             final args = settings.arguments as Map<String,dynamic>;
@@ -110,8 +110,13 @@ class MyApp extends StatelessWidget {
               ),
             );
           case '/chatbot':
-            final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => ChatScreen(userId: userId));
+            final args = settings.arguments as Map<String, dynamic>;
+            return MaterialPageRoute(builder: (_) => ChatScreen(
+              userId: args['userId'] as int?,
+              userLat: args['customerLat'] as double?,
+              userLon: args['customerLon'] as double?,
+              userAddress: args['customerAddress'] as String?,
+            ));
           case '/adminDashboard':
             return MaterialPageRoute(builder: (_) => AdminDashboard());
           default:
