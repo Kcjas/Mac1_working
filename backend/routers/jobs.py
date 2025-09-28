@@ -53,8 +53,7 @@ def request_job(data: JobRequestData):
         db.commit()
         db.refresh(job)
 
-        # (your original code fetched worker user; side-effects omitted here)
-        # worker = db.query(User).filter(User.id == data.worker_id).first()
+    
 
         return {"message": "Job request submitted", "job_id": job.id}
     except Exception as e:

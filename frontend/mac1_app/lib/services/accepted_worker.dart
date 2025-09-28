@@ -25,7 +25,7 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
   Future<void> _loadWorkers() async {
     try {
       final res = await http.get(
-        Uri.parse('http://192.168.1.2:8000/customer/${widget.customerId}/accepted-workers'),
+        Uri.parse('http://192.168.1.12:8000/customer/${widget.customerId}/accepted-workers'),
       );
       if (mounted) {
         setState(() {

@@ -40,7 +40,7 @@ class _JobRequestPageState extends State<JobRequestPage> {
   Future<void> _submitRequest() async {
     if (!_formKey.currentState!.validate() || _selectedDateTime == null) return;
 
-    final url = Uri.parse('http://192.168.1.2:8000/request_job/');
+    final url = Uri.parse('http://192.168.1.12:8000/request_job/');
     final response = await http.post(
       url,
       headers: {"Content-Type": "application/json"},

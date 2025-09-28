@@ -21,7 +21,7 @@ class _IncomingRequestsPageState extends State<IncomingRequestsPage> {
   }
 
   Future<List<Map<String, dynamic>>> fetchIncomingRequests() async {
-    final url = Uri.parse("http://192.168.1.2:8000/worker/${widget.workerId}/incoming-requests");
+    final url = Uri.parse("http://192.168.1.12:8000/worker/${widget.workerId}/incoming-requests");
     final response = await http.get(url);
 
     if (response.statusCode == 200) {

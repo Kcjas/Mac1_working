@@ -24,7 +24,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   // Use your LAN IP for physical device; use 10.0.2.2 for Android emulator to reach host machine.
-  static const String base = "http://192.168.1.2:8000";
+  static const String base = "http://192.168.1.12:8000";
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();

@@ -21,7 +21,7 @@ class _CompletedJobPageState extends State<CompletedJobPage> {
 
   Future <void> _submit() async{
     if(_formKey.currentState!.validate()){
-      final url = Uri.parse("http://192.168.1.2:8000/booking/complete");
+      final url = Uri.parse("http://192.168.1.12:8000/booking/complete");
 
       final response = await http.post(
         url,

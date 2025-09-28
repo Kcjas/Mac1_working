@@ -4,11 +4,11 @@ import '../models/WorkerProfile.dart';
 import '../models/CustomerProfile.dart';
 import '../models/acceptedworker.dart';
 
-const String BASE_URL = 'http://192.168.1.5:8000';
+const String BASE_URL = 'http://192.168.1.12:8000';
 
 class ApiService {
   static Future<Workerprofile> fetchWorkerdata(int userId) async{
-     final response = await http.get(Uri.parse("http://192.168.1.2:8000/worker_profile/$userId"));
+     final response = await http.get(Uri.parse("$BASE_URL/worker_profile/$userId"));
 
     if(response.statusCode == 200){
       final data = json.decode(response.body);
@@ -19,7 +19,7 @@ class ApiService {
   }
 
   static Future<double> fetchWorkerRating(int userId) async{
-      final response = await http.get(Uri.parse("http://192.168.1.2:8000/worker_rating/$userId"));
+      final response = await http.get(Uri.parse("$BASE_URL/worker_rating/$userId"));
 
       if(response.statusCode == 200){
         final data = json.decode(response.body);
@@ -31,7 +31,7 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> fetchLeaderboard() async {
-    final response = await http.get(Uri.parse("http://192.168.1.2:8000/worker/leaderboard"));
+    final response = await http.get(Uri.parse("$BASE_URL/worker/leaderboard"));
     if (response.statusCode == 200) {
       return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       } else {
@@ -40,7 +40,7 @@ class ApiService {
   }
 
   static Future<Customerprofile> fetchCustomerProfile(int userId) async {
-    final response = await http.get(Uri.parse("http://192.168.1.2:8000/customer/profile/$userId"));
+    final response = await http.get(Uri.parse("$BASE_URL/customer/profile/$userId"));
   
     if (response.statusCode == 200) {
       return Customerprofile.fromJson(json.decode(response.body));
@@ -52,7 +52,7 @@ class ApiService {
 
 
   Future<List<AcceptedWorker>> fetchAcceptedWorkers(int userId) async {
-    final uri = Uri.parse('http://192.168.1.2/customer/$userId/accepted-workers');
+    final uri = Uri.parse('$BASE_URL/customer/$userId/accepted-workers');
     final response = await http.get(uri);
 
     if (response.statusCode == 200) {
@@ -72,7 +72,7 @@ class ApiService {
     required String time,
   }) async {
     final response = await http.post(
-      Uri.parse('http://192.168.1.2:8000/book'), 
+      Uri.parse('$BASE_URL/book'), 
       headers: {'Content-Type': 'application/json'},
     body: jsonEncode({
       "customer_id": customerId,

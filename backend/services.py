@@ -18,7 +18,6 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 # ------------- search nearby workers -------------
 def get_workers_by_skill(*, skill: str, user_lat: float, user_lon: float, limit: int = 5) -> List[Dict[str, Any]]:
-    """Return workers with given skill sorted by distance, skipping missing coords."""
     db = SessionLocal()
     try:
         rows = (
@@ -35,11 +34,9 @@ def get_workers_by_skill(*, skill: str, user_lat: float, user_lon: float, limit:
             dist = _haversine_km(user_lat, user_lon, float(w.latitude), float(w.longitude))
 
             out.append({
-                # IMPORTANT: the id you expose must be the user's id (users.id)
-                "user_id": int(w.user_id),             # <-- use this for requests / bookings
-                # keep the Worker row id around if you still need it elsewhere
-                "profile_id": int(w.id),               # (workers.id) optional
-                # keep "id" as an alias to user_id so older code still works
+    
+                "user_id": int(w.user_id),            
+                "profile_id": int(w.id),             
                 "id": int(w.user_id),
 
                 "name": (getattr(u, "full_name", None) or getattr(u, "name", None)
@@ -57,7 +54,6 @@ def get_workers_by_skill(*, skill: str, user_lat: float, user_lon: float, limit:
 
 # ------------- create job request -------------
 def create_job_request(*, customer_id: int, worker_id: int, description: str, when_dt: datetime, lat: float, lon: float) -> int:
-    """Minimal job-request creation. Adjust field names to your JobRequest model."""
     db = SessionLocal()
     try:
         jr = JobRequest(

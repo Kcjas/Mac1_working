@@ -1,237 +1,295 @@
-from __future__ import annotations
-import re
+from fastapi import APIRouter, HTTPException, Body
+from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, Dict, Any, List
+import re
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+# Import ONLY shared modules (never from main.py)
+from ..services import get_workers_by_skill  # note: no create_job_request import
 
-from ..services import get_workers_by_skill, create_job_request  # implemented below
+router = APIRouter(prefix="/convai", tags=["ConversationalAI"])
 
-router = APIRouter(prefix="/convai", tags=["convai"])
+# ---------------- Session store (swap to Redis/DB in prod) ----------------
+SESSIONS: Dict[str, Dict[str, Any]] = {}
 
-# -------------------- Schemas --------------------
-class MessageIn(BaseModel):
-    session_id: str = Field(..., min_length=1)
-    message: str = Field(..., min_length=1)
+# ---------------- Schemas ----------------
+class ChatIn(BaseModel):
+    session_id: str
+    message: str
     user_id: Optional[int] = None
     user_lat: Optional[float] = None
     user_lon: Optional[float] = None
 
-class Suggestion(BaseModel):
-    id: int
-    worker_id: int
-    name: str
-    rating: float
-    hourly_rate: float
-    distance: float  # km
-
-class MessageOut(BaseModel):
+class ChatOut(BaseModel):
+    session_id: str
     reply: str
-    suggestions: Optional[List[Suggestion]] = None
-    state: Dict[str, Any] = {}
+    suggestions: Optional[List[Dict[str, Any]]] = None
+    state: Dict[str, Any]
+    # New: tell the client to navigate to a page (frontend handles the redirect)
+    redirect: Optional[Dict[str, Any]] = None
 
-# -------------------- State ----------------------
-DIALOG_STATE: Dict[str, Dict[str, Any]] = {}
-DEFAULT_GREETING = "Hi! Tell me what’s going on and where. I’ll find the right worker near you."
+# ---------------- NLU (simple; upgrade later) ----------------
+ALLOWED_SKILLS = {"plumber", "electrician", "cleaning", "hvac"}
 
-ALLOWED_SKILLS = {"plumbing", "electrical", "carpentry", "cleaning", "hvac"}
-KEYWORDS = {
-    "plumbing":   ["leak", "pipe", "sink", "tap", "toilet", "clog", "drain"],
-    "electrical": ["light", "socket", "wiring", "switch", "breaker", "fuse", "power"],
-    "carpentry":  ["door", "hinge", "shelf", "wood", "cabinet"],
-    "cleaning":   ["clean", "stain", "mold", "mould", "dust", "deep clean"],
-    "hvac":       ["aircon", "ac", "air con", "air conditioner", "cooling", "heating"],
+INTENT_KEYWORDS = {
+    "greet": ["hi", "hello", "hey"],
+    "goodbye": ["bye", "goodbye", "see you"],
+    "help": ["help", "support"],
+    # removed: "book" intent — request-only flow
+    "request": ["request", "quote", "estimate"],
+    "problem_report": [
+        "leak", "tap", "pipe", "clog", "drain",
+        "light", "fuse", "wire", "short",
+        "clean", "dust", "vacuum",
+        "ac", "aircon", "hvac", "cooling", "air conditioner"
+    ],
 }
 
-def _classify_skill(text: str) -> str | None:
+SKILL_KEYWORDS = {
+    "plumber": ["leak", "tap", "pipe", "clog", "drain"],
+    "electrician": ["electric", "light", "fuse", "wire", "short", "fan"],
+    "cleaning": ["clean", "dust", "vacuum", "maid"],
+    "hvac": ["ac", "aircon", "hvac", "cooling", "air conditioner"],
+}
+
+def detect_intent(text: str) -> str:
     t = text.lower()
-    scores = {k: 0 for k in KEYWORDS}
-    for label, words in KEYWORDS.items():
-        for w in words:
-            if w in t:
-                scores[label] += 1
-    best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else None
+    for intent, words in INTENT_KEYWORDS.items():
+        if any(w in t for w in words):
+            return intent
+    return "unknown"
 
-def _echo_issue(state: Dict[str, Any]) -> str:
-    parts = []
-    if state.get("skill"):
-        parts.append(f"{state['skill']}")
-    if state.get("problem"):
-        parts.append(f"— {state['problem']}")
-    summary = " ".join(parts) if parts else "unspecified"
-    return f"Okay, I’ve captured the issue as: “{summary}”."
 
-# -------------------- Router ---------------------
-@router.post("/message", response_model=MessageOut)
-def message(payload: MessageIn):
-    sid = payload.session_id
-    state = DIALOG_STATE.setdefault(sid, {"stage": "start", "turns": 0})
-    state["turns"] += 1
+def detect_skill(text: str) -> Optional[str]:
+    t = text.lower()
+    for skill, words in SKILL_KEYWORDS.items():
+        if any(w in t for w in words):
+            return skill
+    return None
 
-    text = payload.message.strip()
 
-    # Start: greet explicitly on hi/hello
-    if state["stage"] == "start":
-        if text.lower() in {"hi", "hello", "hey"}:
-            state["stage"] = "gather_info"
-            return MessageOut(reply=DEFAULT_GREETING, state=state)
-        state["stage"] = "gather_info"  # fall through to gather
+DATE_RE = re.compile(r"(\b(?:today|tomorrow)\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b)")
+TIME_RE = re.compile(r"\b(\d{1,2}:\d{2})\b")
 
-    # Opportunistic slot fill
-    if "skill" not in state or not state["skill"]:
-        s = _classify_skill(text)
+def extract_datetime(text: str) -> Optional[datetime]:
+    txt = text.lower()
+    now = datetime.now()
+    m_date = DATE_RE.search(txt)
+    m_time = TIME_RE.search(txt)
+
+    date = None
+    if m_date:
+        token = m_date.group(1)
+        if token == "today":
+            date = now.date()
+        elif token == "tomorrow":
+            date = now.date().fromordinal(now.date().toordinal() + 1)
+        else:
+            try:
+                if "-" in token:
+                    date = datetime.strptime(token, "%Y-%m-%d").date()
+                else:
+                    parts = token.split("/")
+                    if len(parts[2]) == 2:
+                        parts[2] = "20" + parts[2]
+                    date = datetime.strptime("/".join(parts), "%d/%m/%Y").date()
+            except:  # noqa: E722 — keep simple here
+                pass
+
+    time = None
+    if m_time:
+        try:
+            time = datetime.strptime(m_time.group(1), "%H:%M").time()
+        except:  # noqa: E722
+            pass
+
+    if date and time:
+        return datetime.combine(date, time)
+    if date:
+        return datetime.combine(date, datetime.strptime("10:00", "%H:%M").time())
+    return None
+
+# ---------------- State helpers ----------------
+
+def init_session(session_id: str) -> Dict[str, Any]:
+    state: Dict[str, Any] = {
+        "intent": None,
+        "skill": None,
+        "problem": None,
+        "preferred_datetime": None,
+        "address": None,
+        "stage": "start",            # start -> gather_info -> propose -> confirm -> done
+        "last_suggestions": [],
+        "chosen_worker": None,
+        # store a one-shot redirect to be emitted in ChatOut
+        "redirect": None,
+    }
+    SESSIONS[session_id] = state
+    return state
+
+
+def need_slots(state: Dict[str, Any]) -> List[str]:
+    needed: List[str] = []
+    if not state.get("skill"):
+        needed.append("skill")
+    if not state.get("problem"):
+        needed.append("problem")
+    if not state.get("preferred_datetime"):
+        needed.append("preferred_datetime")
+    if not state.get("address"):
+        needed.append("address")
+    return needed
+
+# ---------------- Actions ----------------
+
+def act_search_workers(skill: str, user_lat: float, user_lon: float) -> List[Dict[str, Any]]:
+    # Use shared service (already sorts by distance)
+    results = get_workers_by_skill(skill, customer_lat=user_lat, customer_lon=user_lon)
+    return results[:3]
+
+# ---------------- Dialog policy ----------------
+
+def policy(state: Dict[str, Any], user_msg: str, meta: Dict[str, Any]) -> str:
+    if not state.get("intent") or state["intent"] == "unknown":
+        state["intent"] = detect_intent(user_msg) or "help"
+
+    # fill slots opportunistically
+    if not state.get("skill"):
+        s = detect_skill(user_msg)
         if s in ALLOWED_SKILLS:
             state["skill"] = s
-    if "problem" not in state or not state["problem"]:
-        if len(text) > 3:
-            # keep it short in state to avoid huge echoes
-            state["problem"] = text[:160]
+    if not state.get("problem"):
+        if len(user_msg.strip()) > 3:
+            state["problem"] = user_msg.strip()
+    if not state.get("preferred_datetime"):
+        dt = extract_datetime(user_msg)
+        if dt:
+            state["preferred_datetime"] = dt.isoformat()
+    if not state.get("address"):
+        if " at " in user_msg.lower():
+            state["address"] = user_msg.split(" at ", 1)[1].strip()
 
-    # Try to pull a simple date like "tomorrow 10:00" later if you want; optional.
+    needed = need_slots(state)
 
-    # -------- Gather info
+    if state["stage"] == "start":
+        state["stage"] = "gather_info"
+        return "Hi! Tell me what’s going on and where. I’ll find the right worker and take you to the request form."
+
     if state["stage"] == "gather_info":
-        missing = []
-        if not state.get("skill"):   missing.append("skill")
-        if not state.get("problem"): missing.append("problem")
-
-        if missing:
-            slot = missing[0]
+        if needed:
+            slot = needed[0]
             if slot == "skill":
-                return MessageOut(
-                    reply="What kind of help do you need — plumbing, electrical, carpentry, cleaning, or HVAC?",
-                    state=state
-                )
+                return "What kind of help do you need — plumber, electrician, cleaning, or HVAC?"
             if slot == "problem":
-                return MessageOut(
-                    reply="Could you describe the problem in a sentence or two?",
-                    state=state
-                )
-
-        # we have enough → propose
-        suggestions_raw = get_workers_by_skill(
-            skill=state["skill"],
-            user_lat=payload.user_lat,
-            user_lon=payload.user_lon,
-            limit=5
-        )
-        
-        suggestions: List[Suggestion] = [
-             Suggestion(
-                  id=int(w["user_id"]),          # show the user id (or w["id"] since we aliased it)
-                  worker_id=int(w["user_id"]),   # <-- CRITICAL: this must be users.id
-                  name=str(w["name"]),
-                  rating=float(w.get("rating", 0.0)),
-                  hourly_rate=float(w.get("hourly_rate", 0.0)),
-                  distance=round(float(w.get("distance_km", 0.0)), 2),
-                  )
-                  for w in suggestions_raw
-                ]
+                return "Could you describe the problem in a sentence or two?"
+            if slot == "preferred_datetime":
+                return "When would you like this done? (e.g., 2025-08-16 14:00 or 'tomorrow 10:00')"
+            if slot == "address":
+                return "What’s the service address?"
+        # all slots present → propose workers
+        if not (meta.get("user_lat") and meta.get("user_lon")):
+            return "Share your location so I can find the nearest available workers."
+        suggestions = act_search_workers(state["skill"], meta["user_lat"], meta["user_lon"])
         state["last_suggestions"] = suggestions
         state["stage"] = "propose"
-
         if not suggestions:
-            return MessageOut(
-                reply=_echo_issue(state) + " I couldn’t find anyone nearby just yet. Say “request #1” to notify the closest available workers.",
-                state=state,
+            return (
+                f"Sorry, I couldn’t find any {state['skill']}s nearby right now. "
+                "Want to open the Job Request page so workers can respond?"
             )
-
-        bullets = "\n".join([
-            f"• {s.name} — ⭐ {s.rating} • {s.distance} km • ${s.hourly_rate}/hr"
+        bullets = [
+            f"- {s['name']} • ⭐ {s['rating']}/5 • {s['distance']} km • ${s['hourly_rate']}/hr"
             for s in suggestions
-        ])
-        reply = (
-            f"{_echo_issue(state)} Here are the best matches near you:\n"
-            f"{bullets}\n\n"
-            "Say “request #1” to send a job request, or “book #1 for tomorrow 14:00”."
+        ]
+        return (
+            "Here are the best matches near you:\n" + "\n".join(bullets) +
+            "\n\nSay ‘request #1’ to open the Job Request page for that worker."
         )
-        return MessageOut(reply=reply, suggestions=suggestions, state=state)
 
-    # -------- Propose: allow "request #N" immediately
     if state["stage"] == "propose":
-        m = re.search(r"#(\d+)", text)
-        idx = int(m.group(1)) - 1 if m else None
-        lowered = text.lower()
-        wants_request = "request" in lowered or "quote" in lowered
-        wants_book = "book" in lowered or "schedule" in lowered
-
-        suggestions: List[Suggestion] = state.get("last_suggestions") or []
-
-        if wants_request and idx is not None and 0 <= idx < len(suggestions):
-            chosen: Suggestion = suggestions[idx]
-            # Create a minimal job-request record
-            if payload.user_id and payload.user_lat is not None and payload.user_lon is not None:
-                create_job_request(
-                    customer_id=payload.user_id,
-                    worker_id=chosen.worker_id,
-                    description=state.get("problem") or state.get("skill") or "general",
-                    when_dt=datetime.utcnow(),  # replace with parsed datetime if you add it
-                    lat=payload.user_lat,
-                    lon=payload.user_lon,
-                )
-                state["stage"] = "done"
-                return MessageOut(
-                    reply=f"Sent! Your job request to {chosen.name} is in. I’ll notify you when they respond.",
-                    state=state
-                )
-            else:
-                return MessageOut(
-                    reply="I need your account and location to send the job request.",
-                    state=state
-                )
-
-        if wants_book and idx is not None and 0 <= idx < len(suggestions):
-            chosen: Suggestion = suggestions[idx]
-            state["chosen_worker"] = chosen.model_dump()
+        # choose worker index
+        idx = None
+        m = re.search(r"#(\d+)", user_msg)
+        if m:
+            idx = int(m.group(1)) - 1
+        if idx is None and state["last_suggestions"]:
+            if "first" in user_msg.lower():
+                idx = 0
+        if idx is not None and 0 <= idx < len(state["last_suggestions"]):
+            chosen = state["last_suggestions"][idx]
+            state["chosen_worker"] = chosen
             state["stage"] = "confirm"
-            return MessageOut(
-                reply=f"Great, I’ll contact {chosen.name}. Should I **send a job request** now, or do you want to **book** directly for a specific time?",
-                state=state
+            return (
+                f"Great, I’ll open the Job Request form for {chosen['name']}. "
+                f"Confirm and I’ll prepare the redirect."
             )
+        return "Please choose a worker like ‘request #1’."
 
-        return MessageOut(
-            reply="Please choose a worker like “request #1” or “book #2”.",
-            state=state
-        )
-
-    # -------- Confirm
     if state["stage"] == "confirm":
-        lowered = text.lower()
-        wants_request = "request" in lowered or "quote" in lowered
-        wants_book = "book" in lowered or "schedule" in lowered
         chosen = state.get("chosen_worker")
+        if not chosen:
+            state["stage"] = "propose"
+            return "Which worker would you like? (e.g., ‘request #1’)"
 
-        if wants_request and chosen and payload.user_id and payload.user_lat is not None and payload.user_lon is not None:
-            create_job_request(
-                customer_id=payload.user_id,
-                worker_id=chosen["worker_id"],
-                description=state.get("problem") or state.get("skill") or "general",
-                when_dt=datetime.utcnow(),
-                lat=payload.user_lat,
-                lon=payload.user_lon,
-            )
-            state["stage"] = "done"
-            return MessageOut(
-                reply=f"Sent! Your job request to {chosen['name']} is in. I’ll notify you when they respond.",
-                state=state
-            )
+        # Instead of creating a server-side JobRequest, emit a redirect instruction.
+        state["stage"] = "done"
+        state["redirect"] = {
+            "path": "/job-request",  # frontend route/screen
+            "params": {
+                "worker_id": chosen["worker_id"],
+                "worker_name": chosen["name"],
+                "hourly_rate": chosen["hourly_rate"],
+                # optional prefill from gathered state
+                "preferred_datetime": state.get("preferred_datetime"),
+                "address": state.get("address"),
+                "problem": state.get("problem"),
+            }
+        }
+        return f"Opening the Job Request page for {chosen['name']}…"
 
-        if wants_book and chosen:
-            state["stage"] = "done"
-            return MessageOut(
-                reply=_echo_issue(state) + " I’ll take you to the booking screen with the details pre‑filled.",
-                state=state
-            )
-
-        return MessageOut(
-            reply="Say “book” to proceed with direct booking, or “request” to send a job request first.",
-            state=state
-        )
-
-    # -------- Done
     if state["stage"] == "done":
-        return MessageOut(reply="All set. Need anything else?", state=state)
+        return "All set. Need anything else?"
 
-    return MessageOut(reply="Sorry, I didn’t follow that. Could you rephrase?", state=state)
+    return "Sorry, I didn’t follow that. Could you rephrase?"
+
+# ---------------- Public endpoints ----------------
+
+@router.post("/message", response_model=ChatOut)
+def convai_message(payload: ChatIn):
+    sid = payload.session_id.strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="session_id required")
+
+    state = SESSIONS.get(sid) or init_session(sid)
+    if not state.get("intent") or state["intent"] == "unknown":
+        state["intent"] = detect_intent(payload.message)
+
+    reply = policy(state, payload.message, {
+        "user_id": payload.user_id,
+        "user_lat": payload.user_lat,
+        "user_lon": payload.user_lon,
+    })
+
+    # return the redirect instruction once; client may clear it after navigation
+    redirect_payload = state.get("redirect")
+
+    return ChatOut(
+        session_id=sid,
+        reply=reply,
+        suggestions=state.get("last_suggestions") or None,
+        state=state,
+        redirect=redirect_payload,
+    )
+
+
+@router.post("/reset", response_model=ChatOut)
+def convai_reset(session_id: str = Body(..., embed=True)):
+    state = init_session(session_id)
+    return ChatOut(session_id=session_id, reply="New conversation started. How can I help?", state=state)
+
+
+@router.get("/state", response_model=Dict[str, Any])
+def convai_state(session_id: str):
+    if session_id not in SESSIONS:
+        init_session(session_id)
+    return SESSIONS[session_id]

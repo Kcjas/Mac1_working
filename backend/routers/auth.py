@@ -15,7 +15,7 @@ class SignupData(BaseModel):
     gender: str
     email: EmailStr
     password: str
-    role: str  # e.g., "customer" or "worker" (keep as-is to match your app)
+    role: str  
 
 class LoginData(BaseModel):
     email: EmailStr
@@ -37,14 +37,11 @@ def _get_db() -> Session:
 def signup(data: SignupData):
     db = _get_db()
     try:
-        # Check existing email
         existing = db.query(User).filter(User.email == data.email).first()
         if existing:
-            # NOTE: your old code had a typo "statuscode"; fix to status_code
             raise HTTPException(status_code=409, detail="Email already registered")
 
-        # Create user (keeping plaintext password to match your current code)
-        # If you want hashing later, we can add passlib.
+        
         user = User(
             name=data.name,
             age=data.age,

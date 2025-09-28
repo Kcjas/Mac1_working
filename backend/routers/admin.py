@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 from sqlalchemy import func
 
-from ..database import SessionLocal
-from ..models import User, Worker, Booking, Rating
+from backend.database import SessionLocal
+from backend.models import User, Worker, Booking, Rating
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -63,7 +63,6 @@ def get_total_revenue():
     revenue = 0.0
     for b in completed_bookings:
         rate = db.query(Worker.hourly_rate).filter(Worker.user_id == b.worker_id).scalar() or 0.0
-        # uses b.time_taken as in your original monolith
         time_taken = getattr(b, "time_taken", 0.0) or 0.0
         revenue += (rate * time_taken * 0.10)
     db.close()

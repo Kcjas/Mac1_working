@@ -2,7 +2,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Float, Date, Time, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from .database import Base  # relative import
+from .database import Base 
 
 class User(Base):
     __tablename__ = "users"
@@ -13,9 +13,9 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     password = Column(String)
     role = Column(String)
-    fcm_token = Column(String, nullable=True)  # <- you had this earlier
+    fcm_token = Column(String, nullable=True)  
 
-    # one-to-one with Worker
+    
     worker = relationship("Worker", back_populates="user", uselist=False)
 
 
@@ -43,9 +43,7 @@ class Booking(Base):
     time = Column(Time)
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
-
-    # fields referenced by /booking/complete and /booking/{id}/summary and revenue
-    time_taken = Column(Float, default=0.0)     # hours
+    time_taken = Column(Float, default=0.0)     
     extra_cost = Column(Float, default=0.0)
     extra_reason = Column(String, default="")
 
@@ -79,5 +77,4 @@ class JobRequest(Base):
     worker = relationship("User", foreign_keys=[worker_id])
 
 
-# Optional: you had this table earlier for notifications
 

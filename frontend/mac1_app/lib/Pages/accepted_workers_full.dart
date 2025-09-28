@@ -23,7 +23,7 @@ class _AcceptedWorkersFullState extends State<AcceptedWorkersFull> {
   }
 
   Future<List<dynamic>> fetchAccepted(int userId) async {
-    final url = Uri.parse('http://10.0.2.2:8000/customer/$userId/accepted-workers');
+    final url = Uri.parse('http://192.168.1.12:8000/customer/$userId/accepted-workers');
     print('Hitting: $url');
     final res = await http.get(url);
     print('Status: ${res.statusCode}');
