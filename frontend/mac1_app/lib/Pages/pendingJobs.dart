@@ -21,7 +21,7 @@ class _PendingJobsPageState extends State<PendingJobsPage> {
   }
 
   Future<List<Map<String, dynamic>>> fetchPendingJobs() async {
-    final url = Uri.parse("http://192.168.1.12:8000/worker/${widget.userId}/pending-jobs");
+    final url = Uri.parse("http://10.121.172.237:8000/worker/${widget.userId}/pending-jobs");
 
     final response = await http.get(url);
 

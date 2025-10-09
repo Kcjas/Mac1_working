@@ -46,7 +46,7 @@ class _SignupPageState extends State<Signuppage>{
     }
 
 
-    final url = Uri.parse("http://192.168.1.12:8000/auth/signup");
+    final url = Uri.parse("http://10.121.172.237:8000/auth/signup");
 
     try{
       final response = await http.post(

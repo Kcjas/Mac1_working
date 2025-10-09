@@ -24,7 +24,7 @@ class _finalPaySlipState extends State<Finalpayslip>{
   }
 
   Future<void> fetchPayslip() async{
-    final url = Uri.parse("http://192.168.1.12:8000/booking/${widget.booking_id}/summary");
+    final url = Uri.parse("http://10.121.172.237:8000/booking/${widget.booking_id}/summary");
 
     final response = await http.get(url);
     if(response.statusCode == 200){

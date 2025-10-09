@@ -23,8 +23,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  // Use your LAN IP for physical device; use 10.0.2.2 for Android emulator to reach host machine.
-  static const String base = "http://192.168.1.12:8000";
+  static const String base = "10.121.172.237";
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();
@@ -33,7 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<_Msg> _messages = []; // role: 'user' | 'bot'
   List<dynamic> _suggestions = [];
 
-  // Local, mutable copy of location so we can fetch it here if page was opened without coords.
+
   double? _lat, _lon;
   String? _address;
   bool _busy = false;

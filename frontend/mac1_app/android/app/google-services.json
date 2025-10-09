@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "215860599803",
+    "project_id": "mac1-6d229",
+    "storage_bucket": "mac1-6d229.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:215860599803:android:537c6dcb81390df3cac95e",
+        "android_client_info": {
+          "package_name": "com.example.mac1_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvuocH3n3kI1gDNQ9t6MdsvqtH4xmAXwM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
