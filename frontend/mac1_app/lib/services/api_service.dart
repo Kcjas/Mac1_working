@@ -4,7 +4,7 @@ import '../models/WorkerProfile.dart';
 import '../models/CustomerProfile.dart';
 import '../models/acceptedworker.dart';
 
-const String BASE_URL = 'http://10.121.172.237:8000';
+const String BASE_URL = 'http://10.130.27.237:8000';
 
 class ApiService {
   static Future<Workerprofile> fetchWorkerdata(int userId) async{

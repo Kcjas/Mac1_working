@@ -26,7 +26,7 @@ class _bookingPreviewState extends State<BookingPreview>{
   }
 
   Future<List<Map<String, dynamic>>> fetchPreviewJobs() async {
-    final url = Uri.parse("http://10.121.172.237:8000/worker/${widget.userId}/${widget.type}-jobs");
+    final url = Uri.parse("http://110.130.27.237:8000/worker/${widget.userId}/${widget.type}-jobs");
 
     final response = await http.get(url);
     if (response.statusCode == 200) {

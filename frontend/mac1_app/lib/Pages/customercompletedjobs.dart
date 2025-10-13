@@ -21,7 +21,7 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
   }
 
   Future<List<Map<String, dynamic>>> fetchCompletedJobs(int userId) async {
-    final url = Uri.parse("http://10.121.172.237:8000/customer/$userId/completed-jobs");
+    final url = Uri.parse("http://10.130.27.237:8000/customer/$userId/completed-jobs");
 
     final response = await http.get(url);
     if (response.statusCode == 200) {

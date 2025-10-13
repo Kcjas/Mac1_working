@@ -7,7 +7,7 @@ import re
 
 # ---- import your app/db/models/utilities from main.py ----
 # If this code lives in the same file as your models, remove these imports.
-from main import (
+from backend.main import (
     SessionLocal, User, Worker, Booking, Rating, JobRequest,
     func, calc_distance, get_workers_by_skill, request_job, create_booking
 )

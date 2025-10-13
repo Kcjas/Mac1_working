@@ -24,7 +24,7 @@ class _CustomerCompletedBookingPreviewState extends State<CustomerCompletedBooki
   }
 
   Future<List<Map<String, dynamic>>> fetchCompletedJobs(int userId) async {
-    final url = Uri.parse("http://10.121.172.237:8000/customer/$userId/completed-jobs");
+    final url = Uri.parse("http://10.130.27.237:8000/customer/$userId/completed-jobs");
 
     final response = await http.get(url);
     if (response.statusCode == 200) {
@@ -41,16 +41,57 @@ class _CustomerCompletedBookingPreviewState extends State<CustomerCompletedBooki
       future: _completedJobs,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(),
+            ),
+          );
         } else if (snapshot.hasError) {
-          return const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text("Error loading completed jobs."),
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: Colors.red.shade300,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Error loading completed jobs',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           );
         } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text("No completed jobs yet."),
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No completed jobs yet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           );
         }
 
@@ -60,48 +101,162 @@ class _CustomerCompletedBookingPreviewState extends State<CustomerCompletedBooki
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Completed Jobs",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ...previewJobs.asMap().entries.map((entry) {
+              final index = entry.key;
+              final job = entry.value;
+              return Column(
+                children: [
+                  if (index > 0) const Divider(height: 1),
+                  _buildJobTile(job),
+                ],
+              );
+            }),
+            const Divider(height: 1),
+            InkWell(
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  '/completedJobList',
+                  arguments: widget.userId,
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      jobs.length > 2 ? "View All (${jobs.length})" : "View All",
+                      style: TextStyle(
+                        color: Colors.green.shade600,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: Colors.green.shade600,
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 10),
-            ...previewJobs.map((job) {
-              return Card(
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                elevation: 2,
-                child: ListTile(
-                  title: Text(job['job-title'] ?? 'No title'),
-                  subtitle: Text(" ${job['date']} |  ${job['time']}"),
-                  trailing: ElevatedButton(
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildJobTile(Map<String, dynamic> job) {
+    final title = job['job-title'] ?? 'No title';
+    final date = job['date'] ?? 'N/A';
+    final time = job['time'] ?? 'N/A';
+    final bookingId = job['booking_id'];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.green.shade400, Colors.green.shade600],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.green.shade200.withOpacity(0.5),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.check_circle,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      date,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Icon(
+                      Icons.access_time,
+                      size: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      time,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pushNamed(
                         context,
                         '/payslip',
-                        arguments: job['booking_id'],
+                        arguments: bookingId,
                       );
                     },
-                    child: const Text("View Payslip"),
+                    icon: const Icon(Icons.receipt_long, size: 18),
+                    label: const Text("Payslip"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 2,
+                    ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-              );
-            }),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/completedJobList',
-                    arguments: widget.userId,
-                  );
-                },
-                child: const Text("View All"),
-              ),
-            )
-          ],
-        );
-      },
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

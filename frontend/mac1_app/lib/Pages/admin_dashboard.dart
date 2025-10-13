@@ -12,7 +12,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   // ===== Config =====
-  static const String base = "10.121.172.237";
+  static const String base = "10.130.27.237";
   final int _limit = 20;
 
   // ===== Data =====

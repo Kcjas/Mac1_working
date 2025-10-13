@@ -31,7 +31,7 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
       final pos = await LocationService.getCurrentLocation();
 
       final res = await http.post(
-        Uri.parse('http://10.121.172.237:8000/worker_info'),
+        Uri.parse('http://10.130.27.237:8000/worker_info'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id'    : widget.userId,        

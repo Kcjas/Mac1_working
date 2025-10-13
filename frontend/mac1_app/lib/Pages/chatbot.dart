@@ -23,7 +23,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  static const String base = "10.121.172.237";
+  static const String base = "10.130.27.237";
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();
