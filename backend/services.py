@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 from .database import SessionLocal
-from .models import Worker, User, JobRequest  # adjust names if yours differ
+from .models import Worker, User, JobRequest  
 
-# ------------- distance -------------
+
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
     p1 = math.radians(lat1)
@@ -16,7 +16,6 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
     return 2 * R * math.asin(math.sqrt(a))
 
-# ------------- search nearby workers -------------
 def get_workers_by_skill(*, skill: str, user_lat: float, user_lon: float, limit: int = 5) -> List[Dict[str, Any]]:
     db = SessionLocal()
     try:
@@ -52,22 +51,3 @@ def get_workers_by_skill(*, skill: str, user_lat: float, user_lon: float, limit:
         db.close()
 
 
-# ------------- create job request -------------
-def create_job_request(*, customer_id: int, worker_id: int, description: str, when_dt: datetime, lat: float, lon: float) -> int:
-    db = SessionLocal()
-    try:
-        jr = JobRequest(
-            customer_id=customer_id,
-            worker_id=worker_id,
-            description=description,
-            preferred_datetime=when_dt,
-            customer_lat=lat,
-            customer_lon=lon,
-            status="pending",
-        )
-        db.add(jr)
-        db.commit()
-        db.refresh(jr)
-        return jr.id
-    finally:
-        db.close()

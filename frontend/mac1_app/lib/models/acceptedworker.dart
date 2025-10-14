@@ -7,11 +7,9 @@ class AcceptedWorker {
   final double distance;
   final double customerLat;
   final double customerLon;
-  final String date;     // NEW
+  final String date;
   final String time; 
   
-
-
   AcceptedWorker({
     required this.workerId,
     required this.name,
@@ -37,6 +35,4 @@ class AcceptedWorker {
       customerLon: (json['customer_lon'] as num).toDouble(),
       date: json['date'],  
       time: json['time'],
-    );
-  }
-}
+    );}}

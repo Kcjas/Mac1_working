@@ -24,7 +24,7 @@ class _CustomerCompletedBookingPreviewState extends State<CustomerCompletedBooki
   }
 
   Future<List<Map<String, dynamic>>> fetchCompletedJobs(int userId) async {
-    final url = Uri.parse("http://10.130.27.237:8000/customer/$userId/completed-jobs");
+    final url = Uri.parse("http://192.168.1.12:8000/customer/$userId/completed-jobs");
 
     final response = await http.get(url);
     if (response.statusCode == 200) {

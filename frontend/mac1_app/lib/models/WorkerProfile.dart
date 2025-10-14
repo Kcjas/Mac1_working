@@ -24,5 +24,4 @@ class Workerprofile {
       experience: json['experience'],
       hourlyRate: (json['hourly_rate'] as num).toDouble(),
     );
-  }
-}
+    }}

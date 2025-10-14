@@ -15,8 +15,10 @@ import 'Pages/finalPaySlip.dart';
 import 'Pages/Rating.dart';
 import 'Pages/chatbot.dart';
 import 'Pages/admin_dashboard.dart';
+import 'Pages/jobrequest.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
@@ -184,6 +186,21 @@ class MyApp extends StatelessWidget {
 
           case '/adminDashboard':
             return MaterialPageRoute(builder: (_) => AdminDashboard());
+
+          case '/job-request':
+            final args = settings.arguments as Map<String, dynamic>;
+            return MaterialPageRoute(builder: (_) => JobRequestPage(
+              customerId: args['customerId'] as int,
+              workerId: args['workerId'] as int,
+              workerName: args['workerName'] as String,
+              workerSkill: args['workerSkill'] as String,
+              hourlyRate: (args['hourlyRate'] as num).toDouble(),
+              distance: (args['distance'] as num).toDouble(),
+              customerLat: (args['customerLat'] as num).toDouble(),
+              customerLon: (args['customerLon'] as num).toDouble(),
+              customerAddress: args['customerAddress'] as String,
+              problem: args['problem']! as String,
+            ));
 
           default:
             return MaterialPageRoute(

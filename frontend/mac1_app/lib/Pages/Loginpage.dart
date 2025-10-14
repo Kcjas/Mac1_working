@@ -19,7 +19,7 @@ class _LoginpageState extends State<Loginpage> {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      final url = Uri.parse("http://10.130.27.237:8000/auth/login");
+      final url = Uri.parse("http://192.168.1.12:8000/auth/login");
 
       try {
         final response = await http.post(

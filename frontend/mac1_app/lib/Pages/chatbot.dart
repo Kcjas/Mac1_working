@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
@@ -16,6 +17,7 @@ class ChatScreen extends StatefulWidget {
     this.userLat,
     this.userLon,
     this.userAddress,
+
   });
 
   @override
@@ -23,16 +25,15 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  static const String base = "10.130.27.237";
+  static const String apiBase = "http://192.168.1.12:8000";
+  Uri _api(String path) => Uri.parse("$apiBase$path");
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   final String _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
 
-  final List<_Msg> _messages = []; // role: 'user' | 'bot'
-  List<dynamic> _suggestions = [];
-
-
+  final List<_Msg> _messages = []; 
+  List<Map<String, dynamic>> _suggestions = [];
   double? _lat, _lon;
   String? _address;
   bool _busy = false;
@@ -43,7 +44,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _lat = widget.userLat;
     _lon = widget.userLon;
     _address = widget.userAddress;
-    // greet
     WidgetsBinding.instance.addPostFrameCallback((_) => _send("hi"));
   }
 
@@ -62,7 +62,7 @@ class _ChatScreenState extends State<ChatScreen> {
               p.administrativeArea,
               p.postalCode,
               p.country
-            ].where((e) => (e ?? '').trim().isNotEmpty).join(', ');
+            ].where((e) => (e ?? '').toString().trim().isNotEmpty).join(', ');
           });
         }
       } catch (_) {}
@@ -105,7 +105,7 @@ class _ChatScreenState extends State<ChatScreen> {
             p.administrativeArea,
             p.postalCode,
             p.country
-          ].where((e) => (e ?? '').trim().isNotEmpty).join(', ');
+          ].where((e) => (e ?? '').toString().trim().isNotEmpty).join(', ');
         }
       } catch (_) {}
       if (!mounted) return;
@@ -131,31 +131,69 @@ class _ChatScreenState extends State<ChatScreen> {
       _busy = true;
     });
 
-    // If we don't have location yet, try to fetch once (non-blocking for user UX).
+    // If we don't have location yet, try to fetch once.
     if (_lat == null || _lon == null) {
       await _ensureLocation();
     }
 
-    final uri = Uri.parse("$base/convai/message");
     try {
       final res = await http.post(
-        uri,
+        _api("/convai/message"),
         headers: {"Content-Type": "application/json"},
         body: json.encode({
           "session_id": _sessionId,
           "message": text,
           "user_id": widget.userId,
-          "user_lat": _lat, // may be null if user declined; backend should handle gracefully
+          "user_lat": _lat, 
           "user_lon": _lon,
         }),
       );
 
       if (res.statusCode == 200) {
-        final body = json.decode(res.body);
+        final Map<String, dynamic> body = json.decode(res.body);
+        final reply = (body["reply"] ?? "").toString();
         setState(() {
-          _messages.add(_Msg(role: "bot", text: (body["reply"] ?? "").toString()));
-          _suggestions = body["suggestions"] ?? [];
+          _messages.add(_Msg(role: "bot", text: reply));
         });
+
+        final sugg = body["suggestions"];
+        if (sugg is List) {
+          setState(() {
+            _suggestions = sugg.map<Map<String, dynamic>>((e) {
+              if (e is Map<String, dynamic>) return e;
+              return Map<String, dynamic>.from(e as Map);
+            }).toList();
+          });
+        } else {
+          setState(() => _suggestions = []);
+        }
+
+        final redirect = body["redirect"];
+        if (redirect is Map<String, dynamic>) {
+          final path = (redirect["path"] ?? "").toString();
+          final params = (redirect["params"] is Map<String, dynamic>)
+              ? (redirect["params"] as Map<String, dynamic>)
+              : <String, dynamic>{};
+            if (widget.userId != null) {
+              params["customerId"] = widget.userId;
+            }
+            if (_lat != null && _lon != null) {
+              params["customer_lat"] = _lat;
+              params["customer_lon"] = _lon;
+            }
+            if (_address != null) {
+              params["customerAddress"] = _address;
+            }
+          try {
+            if (!mounted) return;
+            Navigator.pushNamed(context, path, arguments: params);
+          } catch (_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Job Request route not found. Wire '/job-request' in your routes.")),
+            );
+          }
+        }
       } else {
         setState(() {
           _messages.add(_Msg(role: "bot", text: "Oops, something went wrong. (${res.statusCode})"));
@@ -167,7 +205,7 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     } finally {
       _scrollToEnd();
-      setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -257,7 +295,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     children: [
                       const SizedBox(height: 8),
                       ..._suggestions.asMap().entries.map((e) {
-                        final idx = e.key; final s = e.value;
+                        final idx = e.key; 
+                        final s = e.value;
+                        final name = (s["name"] ?? "—").toString();
                         final rating = (s["rating"] ?? 0).toString();
                         final dist = (s["distance"] ?? "-").toString();
                         final rate = (s["hourly_rate"] ?? "-").toString();
@@ -265,13 +305,13 @@ class _ChatScreenState extends State<ChatScreen> {
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.build),
-                            title: Text(s["name"]?.toString() ?? "—"),
+                            title: Text(name),
                             subtitle: Text("⭐ $rating • $dist km • \$$rate/hr"),
                             trailing: TextButton(
-                              onPressed: () => _send("request #${idx + 1}"),
+                              onPressed: () => _send("${idx + 1}"),
                               child: const Text("Request"),
                             ),
-                            onTap: () => _send("book #${idx + 1}"),
+                            onTap: () => _send("${idx + 1}"),
                           ),
                         );
                       }),
@@ -295,9 +335,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
                 IconButton(
-                  icon: _busy ? const SizedBox(
-                    width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)
-                  ) : const Icon(Icons.send),
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.send),
                   onPressed: _busy ? null : () => _send(_controller.text),
                 )
               ],

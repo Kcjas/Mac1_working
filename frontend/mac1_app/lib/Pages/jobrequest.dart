@@ -14,6 +14,7 @@ class JobRequestPage extends StatefulWidget {
   final double customerLat;         
   final double customerLon;      
   final String customerAddress;
+  final String problem;
 
   const JobRequestPage({
     super.key,
@@ -23,9 +24,10 @@ class JobRequestPage extends StatefulWidget {
     required this.workerSkill,
     required this.hourlyRate,
     required this.distance, 
-     required this.customerLat,
+    required this.customerLat,
     required this.customerLon,
     required this.customerAddress,
+    required this.problem
   });
 
   @override
@@ -40,7 +42,7 @@ class _JobRequestPageState extends State<JobRequestPage> {
   Future<void> _submitRequest() async {
     if (!_formKey.currentState!.validate() || _selectedDateTime == null) return;
 
-    final url = Uri.parse('http://10.130.27.2377:8000/request_job/');
+    final url = Uri.parse('http://192.168.1.12:8000/request_job/');
     final response = await http.post(
       url,
       headers: {"Content-Type": "application/json"},
@@ -114,10 +116,10 @@ class _JobRequestPageState extends State<JobRequestPage> {
                     children: [
                       TextFormField(
                         controller: _descriptionController,
-                        decoration: const InputDecoration(
-                          labelText: "Describe the job",
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.description),
+                        decoration: InputDecoration(
+                          labelText: widget.problem.isNotEmpty ? widget.problem : "Job Description",
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.description),
                         ),
                         maxLines: 3,
                         validator: (value) =>

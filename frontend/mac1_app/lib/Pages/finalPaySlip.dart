@@ -24,7 +24,7 @@ class _finalPaySlipState extends State<Finalpayslip> {
   }
 
   Future<void> fetchPayslip() async {
-    final url = Uri.parse("http://10.130.27.237:8000/booking/${widget.booking_id}/summary");
+    final url = Uri.parse("http://192.168.1.12:8000/booking/${widget.booking_id}/summary");
 
     final response = await http.get(url);
     if (response.statusCode == 200) {
@@ -39,9 +39,7 @@ class _finalPaySlipState extends State<Finalpayslip> {
   @override
   Widget build(BuildContext context) {
     if (payslip == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()),);
     }
 
     if (payslip?['time_taken'] == 0) {
@@ -50,12 +48,7 @@ class _finalPaySlipState extends State<Finalpayslip> {
           title: const Text("Invoice"),
           elevation: 0,
         ),
-        body: const Center(
-          child: Text(
-            "Waiting for Details",
-            style: TextStyle(fontSize: 16),
-          ),
-        ),
+        body: const Center(child: Text("Waiting for Details",style: TextStyle(fontSize: 16),),),
       );
     }
 
@@ -74,8 +67,6 @@ class _finalPaySlipState extends State<Finalpayslip> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 8),
-              
-              // Job Title
               Text(
                 payslip!['job_title'] ?? 'N/A',
                 style: const TextStyle(
@@ -86,8 +77,6 @@ class _finalPaySlipState extends State<Finalpayslip> {
                 ),
               ),
               const SizedBox(height: 8),
-              
-              // Worker Name
               Text(
                 payslip!['worker_name'] ?? 'N/A',
                 style: TextStyle(
@@ -96,8 +85,6 @@ class _finalPaySlipState extends State<Finalpayslip> {
                 ),
               ),
               const SizedBox(height: 40),
-
-              // Service Details
               _buildRow("Duration", "${payslip!['time_taken']} hours"),
               _buildRow("Service Cost", "\$${payslip!['service_cost']}"),
               _buildRow("Commission (10%)", "\$${payslip!['commission']}"),
@@ -125,8 +112,6 @@ class _finalPaySlipState extends State<Finalpayslip> {
                 color: Colors.grey.shade300,
               ),
               const SizedBox(height: 24),
-
-              // Total
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -171,14 +156,7 @@ class _finalPaySlipState extends State<Finalpayslip> {
               color: Colors.grey.shade700,
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.black87,
-            ),
-          ),
+          Text(value,style: const TextStyle(fontSize: 16,fontWeight: FontWeight.w500,color: Colors.black87,)),
         ],
       ),
     );

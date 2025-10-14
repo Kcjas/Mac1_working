@@ -33,7 +33,7 @@ class _ServiceWorkersPageState extends State<ServiceWorkersPage> {
   }
 
   Future<List<Map<String, dynamic>>> fetchWorkersBySkill(String skill) async {
-    final url = Uri.parse("http://10.130.27.237:8000/workers/skill/$skill?customer_lat=${widget.customerLat}&customer_lon=${widget.customerLon}");
+    final url = Uri.parse("http://192.168.1.12:8000/workers/skill/$skill?customer_lat=${widget.customerLat}&customer_lon=${widget.customerLon}");
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
@@ -80,7 +80,8 @@ class _ServiceWorkersPageState extends State<ServiceWorkersPage> {
                           distance: worker['distance'],
                           customerLat: widget.customerLat,             
                           customerLon: widget.customerLon,              
-                          customerAddress: widget.customerAddress
+                          customerAddress: widget.customerAddress,
+                          problem: "",
                         ))
                       );
                     },

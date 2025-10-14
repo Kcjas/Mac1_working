@@ -44,8 +44,7 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   Future<void> fetchAddressFromCoords() async {
-    final url = Uri.parse(
-        "https://nominatim.openstreetmap.org/reverse?format=json&lat=${widget.customerLat}&lon=${widget.customerLon}");
+    final url = Uri.parse("https://nominatim.openstreetmap.org/reverse?format=json&lat=${widget.customerLat}&lon=${widget.customerLon}");
 
     try {
       final response = await http.get(url);
@@ -68,11 +67,7 @@ class _BookingPageState extends State<BookingPage> {
 
   void _submitBooking() async {
     final jobTitle = _jobTitleController.text.trim();
-    if (jobTitle.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter job title")),
-      );
-    }
+    if (jobTitle.isEmpty) {ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter job title")),);}
 
     final response = await ApiService.createBooking(
       customerId: widget.customerId,
@@ -115,9 +110,7 @@ class _BookingPageState extends State<BookingPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.workerName,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(widget.workerName,style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     Text("Skill: ${widget.skill}"),
                     Text("Hourly Rate: ₹${widget.hourlyRate.toStringAsFixed(0)}"),
                     Text("Rating: ${widget.rating} ⭐"),
@@ -145,9 +138,7 @@ class _BookingPageState extends State<BookingPage> {
               title: const Text("Scheduled Time"),
               subtitle: Text(widget.time),
             ),
-
             const Divider(),
-
             const Text("Estimated Receipt", style: TextStyle(fontWeight: FontWeight.bold)),
             Text("Service Cost: ₹${widget.hourlyRate.toStringAsFixed(0)} /h"),
             Text("Commission (10%): ₹${commission.toStringAsFixed(0)}/h"),

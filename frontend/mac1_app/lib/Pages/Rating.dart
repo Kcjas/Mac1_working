@@ -27,7 +27,7 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
     setState(() => _isSubmitting = true);
 
     final response = await http.post(
-      Uri.parse("http://10.130.27.237:8000/rate"),
+      Uri.parse("http://192.168.1.12:8000/rate"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
         "customer_id": widget.customerId,

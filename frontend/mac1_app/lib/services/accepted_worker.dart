@@ -6,7 +6,12 @@ class AcceptedWorkerPage extends StatefulWidget {
   final int customerId;
   final double customerLat;
   final double customerLon;
-  const AcceptedWorkerPage({Key? key, required this.customerId,required this.customerLat,required this.customerLon}) : super(key: key);
+  const AcceptedWorkerPage({
+    Key? key,
+    required this.customerId,
+    required this.customerLat,
+    required this.customerLon,
+  }) : super(key: key);
 
   @override
   State<AcceptedWorkerPage> createState() => _AcceptedWorkerPageState();
@@ -25,7 +30,7 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
   Future<void> _loadWorkers() async {
     try {
       final res = await http.get(
-        Uri.parse('http://10.130.27.237/customer/${widget.customerId}/accepted-workers'),
+        Uri.parse('http://192.168.1.12/customer/${widget.customerId}/accepted-workers'),
       );
       if (mounted) {
         setState(() {
@@ -43,87 +48,183 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (workers.isEmpty) return const Center(child: Text('No accepted workers yet.'));
+    if (_loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    if (workers.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Column(
             children: [
-              const Text('Accepted Workers',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              TextButton(
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  '/acceptedWorkerList',      
-                  arguments: widget.customerId,
+              Icon(
+                Icons.people_outline,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No accepted workers yet',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
                 ),
-                child: const Text('View All'),
-              )
+              ),
             ],
           ),
         ),
-      
+      );
+    }
+
+    return Column(
+      children: [
         SizedBox(
-          height: 260,
+          height: 240,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             itemCount: workers.length,
             itemBuilder: (_, idx) {
               final w = workers[idx];
               return Container(
-                width: 285,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
+                width: 300,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
                 child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(w['name'],
-                            style: const TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text('${w['skill']}  •  ⭐ ${w['rating']}'),
-                        Text('₹${w['hourly_rate']}/hr'),
-                        Text('${w['distance']} km away'),
-                        const Spacer(),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            OutlinedButton(
-                              onPressed: () => Navigator.pushNamed(
-                                context,
-                                '/acceptedWorkerList',
-                                arguments: widget.customerId,
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Colors.purple.shade400, Colors.purple.shade600],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Text('View More'),
+                              child: const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pushNamed(
-                                context,
-                                '/book',
-                                arguments: {
-                                  'customerId': widget.customerId,
-                                  'workerId':   w['worker_id'],
-                                  'workerName': w['name'],
-                                  'skill':      w['skill'],
-                                  'hourlyRate': w['hourly_rate'],
-                                  'rating':     w['rating'],
-                                  'customerLat': widget.customerLat,
-                                  'customerLon': widget.customerLon,
-                                  'date': w['date'],
-                                  'time':w['time'],
-                                },
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    w['name'],
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    w['skill'],
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              child: const Text('Schedule'),
                             ),
                           ],
-                        )
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            _buildInfoChip(
+                              Icons.star,
+                              '${w['rating']}',
+                              Colors.amber.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            _buildInfoChip(
+                              Icons.attach_money,
+                              '${w['hourly_rate']}/hr',
+                              Colors.green.shade600,
+                            ),
+                            const SizedBox(width: 8),
+                            _buildInfoChip(
+                              Icons.location_on,
+                              '${w['distance']} km',
+                              Colors.blue.shade600,
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.pushNamed(
+                                  context,
+                                  '/acceptedWorkerList',
+                                  arguments: widget.customerId,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Colors.purple.shade600),
+                                  foregroundColor: Colors.purple.shade600,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Text('Details'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => Navigator.pushNamed(
+                                  context,
+                                  '/book',
+                                  arguments: {
+                                    'customerId': widget.customerId,
+                                    'workerId': w['worker_id'],
+                                    'workerName': w['name'],
+                                    'skill': w['skill'],
+                                    'hourlyRate': w['hourly_rate'],
+                                    'rating': w['rating'],
+                                    'customerLat': widget.customerLat,
+                                    'customerLon': widget.customerLon,
+                                    'date': w['date'],
+                                    'time': w['time'],
+                                  },
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.purple.shade600,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: const Text('Book'),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -132,7 +233,70 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
             },
           ),
         ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () {
+            Navigator.pushNamed(
+              context,
+              '/acceptedWorkerList',
+              arguments: widget.customerId,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "View All Workers",
+                  style: TextStyle(
+                    color: Colors.purple.shade600,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: Colors.purple.shade600,
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildInfoChip(IconData icon, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

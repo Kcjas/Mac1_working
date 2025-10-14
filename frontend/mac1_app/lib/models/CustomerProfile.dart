@@ -3,7 +3,6 @@ class Customerprofile {
   final int age;
   final String gender;
  
-
   Customerprofile({
     required this.name,
     required this.age,
@@ -16,5 +15,4 @@ class Customerprofile {
       age: json['age'], 
       gender: json['gender'], 
     );
-  }
-}
+  }}
