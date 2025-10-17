@@ -11,195 +11,429 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  // ===== Config =====
-  static const String base = "192.168.1.12";
-  final int _limit = 20;
+  static const String scheme = "http";
+  static const String host = "192.168.1.12"; 
+  static const int port = 8000;
+  static const int usersLimit = 5;
+  static const int workersLimit = 5;
+  static const int bookingsLimit = 5;
 
-  // ===== Data =====
-  List<dynamic> users = [];
-  List<dynamic> workers = [];
-  List<dynamic> bookings = [];
-  double revenue = 0.0;
+  Map<String, String> get _headers => {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      };
 
-  // ===== Paging =====
-  int _usersPage = 1, _workersPage = 1, _bookingsPage = 1;
-  bool _usersHasNext = false, _workersHasNext = false, _bookingsHasNext = false;
-
-  // ===== Loading flags =====
-  bool _loadingUsers = false, _loadingWorkers = false, _loadingBookings = false, _loadingRevenue = false;
-
-  // ===== Search / Filters =====
-  final _userSearch = TextEditingController();
-  final _workerSearch = TextEditingController();
-  final _bookingSearch = TextEditingController();
-  String? _roleFilter;      // users: customer | worker | admin
-  String? _skillFilter;     // workers: plumber | electrician | cleaning | hvac
-  String? _statusFilter;    // bookings: pending | completed | accepted | rejected
-
-  // ===== Sorting =====
-  // Workers
-  String _workersSortBy = "rating"; // rating | name
-  String _workersSortDir = "desc";   // asc | desc
-  // Bookings
-  String _bookingsSortBy = "date";   // date | status | title
-  String _bookingsSortDir = "desc";  // asc | desc
-
-  // ===== Debounce =====
-  Timer? _debUsers, _debWorkers, _debBookings;
-
-  @override
-  void initState() {
-    super.initState();
-    fetchAll();
-  }
-
-  @override
-  void dispose() {
-    _userSearch.dispose();
-    _workerSearch.dispose();
-    _bookingSearch.dispose();
-    _debUsers?.cancel();
-    _debWorkers?.cancel();
-    _debBookings?.cancel();
-    super.dispose();
-  }
-
-  // -------- Utilities --------
-  Uri _uri(String path, Map<String, String?> q) {
+  Uri _uri(String path, [Map<String, String?> q = const {}]) {
     final qp = <String, String>{};
     q.forEach((k, v) {
       if (v != null && v.trim().isNotEmpty) qp[k] = v.trim();
     });
-    return Uri.parse("$base$path").replace(queryParameters: qp.isEmpty ? null : qp);
+    return Uri(
+      scheme: scheme,
+      host: host,
+      port: port,
+      path: path.startsWith("/") ? path : "/$path",
+      queryParameters: qp.isEmpty ? null : qp,
+    );
   }
 
-  Future<void> fetchAll() async {
+  Future<http.Response> _get(String path, {Map<String, String?> q = const {}}) async {
+    final res = await http.get(_uri(path, q), headers: _headers);
+    if (res.statusCode >= 200 && res.statusCode < 300) return res;
+    throw Exception("GET $path failed (${res.statusCode}): ${res.body}");
+  }
+
+  Future<http.Response> _patch(String path, Map<String, dynamic> body) async {
+    final res = await http.patch(_uri(path), headers: _headers, body: json.encode(body));
+    if (res.statusCode >= 200 && res.statusCode < 300) return res;
+    throw Exception("PATCH $path failed (${res.statusCode}): ${res.body}");
+  }
+
+  Future<http.Response> _delete(String path) async {
+    final res = await http.delete(_uri(path), headers: _headers);
+    if (res.statusCode >= 200 && res.statusCode < 300) return res;
+    throw Exception("DELETE $path failed (${res.statusCode}): ${res.body}");
+  }
+
+  ({List data, bool hasNext}) _parseList(String body, {required int limit}) {
+    final decoded = json.decode(body);
+    if (decoded is List) return (data: decoded, hasNext: decoded.length >= limit);
+    if (decoded is Map) {
+      final items = (decoded["items"] ?? decoded["data"] ?? decoded["results"] ?? []) as List;
+      final hasNext = (decoded["has_next"] == true) ||
+          (decoded["next"] != null) ||
+          (decoded["page"] != null &&
+              decoded["total_pages"] != null &&
+              decoded["page"] < decoded["total_pages"]);
+      return (data: items, hasNext: hasNext);
+    }
+    return (data: const [], hasNext: false);
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  // ================= STATE =================
+  double revenue = 0;
+  bool loadingRevenue = false;
+
+  final userSearch = TextEditingController();
+  String? roleFilter;
+  List users = [];
+  bool loadingUsers = false, usersHasNext = false;
+  int usersPage = 1;
+
+  final workerSearch = TextEditingController();
+  String? skillFilter;
+  String workersSortBy = "rating", workersSortDir = "desc";
+  List workers = [];
+  bool loadingWorkers = false, workersHasNext = false;
+  int workersPage = 1;
+
+  final bookingSearch = TextEditingController();
+  String? statusFilter;
+  String bookingsSortBy = "date", bookingsSortDir = "desc";
+  List bookings = [];
+  bool loadingBookings = false, bookingsHasNext = false;
+  int bookingsPage = 1;
+
+  Timer? debUsers, debWorkers, debBookings;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAll();
+  }
+
+  @override
+  void dispose() {
+    userSearch.dispose();
+    workerSearch.dispose();
+    bookingSearch.dispose();
+    debUsers?.cancel();
+    debWorkers?.cancel();
+    debBookings?.cancel();
+    super.dispose();
+  }
+
+  // ================= FETCHERS =================
+  Future<void> _refreshAll() async {
     await Future.wait([
-      _fetchUsers(reset: true),
-      _fetchWorkers(reset: true),
-      _fetchBookings(reset: true),
       _fetchRevenue(),
+      _fetchUsers(page: 1),
+      _fetchWorkers(page: 1),
+      _fetchBookings(page: 1),
     ]);
   }
 
-  // -------- API Calls --------
-  Future<void> _fetchUsers({bool reset = false}) async {
-    if (reset) {
-      _usersPage = 1;
-      users = [];
-    }
-    setState(() => _loadingUsers = true);
-    try {
-      final res = await http.get(_uri("/admin/users", {
-        "search": _userSearch.text,
-        "role": _roleFilter,
-        "page": _usersPage.toString(),
-        "limit": _limit.toString(),
-      }));
-      if (res.statusCode == 200) {
-        final body = json.decode(res.body);
-        final List items = body is Map ? (body["items"] ?? []) : (json.decode(res.body) ?? []);
-        // If your backend returns plain list (no paging envelope), fallback:
-        final useItems = (body is Map && body.containsKey("items")) ? items : (body as List);
-        final hasNext = (body is Map) ? (body["has_next"] ?? false) : false;
-        setState(() {
-          users.addAll(useItems);
-          _usersHasNext = hasNext;
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _loadingUsers = false);
-    }
-  }
-
-  Future<void> _fetchWorkers({bool reset = false}) async {
-    if (reset) {
-      _workersPage = 1;
-      workers = [];
-    }
-    setState(() => _loadingWorkers = true);
-    try {
-      final res = await http.get(_uri("/admin/workers", {
-        "search": _workerSearch.text,
-        "skill": _skillFilter,
-        "page": _workersPage.toString(),
-        "limit": _limit.toString(),
-        "sort_by": _workersSortBy,
-        "sort_dir": _workersSortDir,
-      }));
-      if (res.statusCode == 200) {
-        final body = json.decode(res.body);
-        final List items = body is Map ? (body["items"] ?? []) : (json.decode(res.body) ?? []);
-        final useItems = (body is Map && body.containsKey("items")) ? items : (body as List);
-        final hasNext = (body is Map) ? (body["has_next"] ?? false) : false;
-        setState(() {
-          workers.addAll(useItems);
-          _workersHasNext = hasNext;
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _loadingWorkers = false);
-    }
-  }
-
-  Future<void> _fetchBookings({bool reset = false}) async {
-    if (reset) {
-      _bookingsPage = 1;
-      bookings = [];
-    }
-    setState(() => _loadingBookings = true);
-    try {
-      final res = await http.get(_uri("/admin/bookings", {
-        "search": _bookingSearch.text,
-        "status": _statusFilter,
-        "page": _bookingsPage.toString(),
-        "limit": _limit.toString(),
-        "sort_by": _bookingsSortBy,
-        "sort_dir": _bookingsSortDir,
-      }));
-      if (res.statusCode == 200) {
-        final body = json.decode(res.body);
-        final List items = body is Map ? (body["items"] ?? []) : (json.decode(res.body) ?? []);
-        final useItems = (body is Map && body.containsKey("items")) ? items : (body as List);
-        final hasNext = (body is Map) ? (body["has_next"] ?? false) : false;
-        setState(() {
-          bookings.addAll(useItems);
-          _bookingsHasNext = hasNext;
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _loadingBookings = false);
-    }
-  }
-
   Future<void> _fetchRevenue() async {
-    setState(() => _loadingRevenue = true);
+    setState(() => loadingRevenue = true);
     try {
-      final res = await http.get(Uri.parse("$base/admin/revenue"));
-      if (res.statusCode == 200) {
-        final body = json.decode(res.body);
-        setState(() => revenue = body["total_revenue"]?.toDouble() ?? 0.0);
-      }
+      final res = await _get("/admin/revenue");
+      final body = json.decode(res.body);
+      final total = body["total_revenue"] ?? body["total"] ?? 0;
+      setState(() => revenue = (total is num) ? total.toDouble() : 0);
+    } catch (e) {
+      _toast("Revenue error: $e");
     } finally {
-      if (mounted) setState(() => _loadingRevenue = false);
+      if (mounted) setState(() => loadingRevenue = false);
     }
   }
 
-  // -------- UI Helpers --------
-  Widget _section(String title, Widget child, VoidCallback onRefreshTap) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+  Future<void> _fetchUsers({int? page}) async {
+    if (page != null) usersPage = page;
+    setState(() => loadingUsers = true);
+    try {
+      final res = await _get("/admin/users", q: {
+        "search": userSearch.text,
+        "role": roleFilter,
+        "page": "$usersPage",
+        "limit": "$usersLimit",
+      });
+      final parsed = _parseList(res.body, limit: usersLimit);
+      setState(() {
+        users = parsed.data;
+        usersHasNext = parsed.hasNext;
+      });
+    } catch (e) {
+      _toast("Users error: $e");
+    } finally {
+      if (mounted) setState(() => loadingUsers = false);
+    }
+  }
+
+  Future<void> _fetchWorkers({int? page}) async {
+    if (page != null) workersPage = page;
+    setState(() => loadingWorkers = true);
+    try {
+      final res = await _get("/admin/workers", q: {
+        "search": workerSearch.text,
+        "skill": skillFilter,
+        "page": "$workersPage",
+        "limit": "$workersLimit",
+        "sort_by": workersSortBy,
+        "sort_dir": workersSortDir,
+      });
+      final parsed = _parseList(res.body, limit: workersLimit);
+      setState(() {
+        workers = parsed.data;
+        workersHasNext = parsed.hasNext;
+      });
+    } catch (e) {
+      _toast("Workers error: $e");
+    } finally {
+      if (mounted) setState(() => loadingWorkers = false);
+    }
+  }
+
+  Future<void> _fetchBookings({int? page}) async {
+    if (page != null) bookingsPage = page;
+    setState(() => loadingBookings = true);
+    try {
+      final res = await _get("/admin/bookings", q: {
+        "search": bookingSearch.text,
+        "status": statusFilter,
+        "page": "$bookingsPage",
+        "limit": "$bookingsLimit",
+        "sort_by": bookingsSortBy,
+        "sort_dir": bookingsSortDir,
+      });
+      final parsed = _parseList(res.body, limit: bookingsLimit);
+      setState(() {
+        bookings = parsed.data;
+        bookingsHasNext = parsed.hasNext;
+      });
+    } catch (e) {
+      _toast("Bookings error: $e");
+    } finally {
+      if (mounted) setState(() => loadingBookings = false);
+    }
+  }
+
+  // ================= EDIT DIALOGS =================
+  Future<void> _editUserDialog(Map u) async {
+    final nameCtrl = TextEditingController(text: "${u['name'] ?? ''}");
+    final emailCtrl = TextEditingController(text: "${u['email'] ?? ''}");
+    String role = "${u['role'] ?? 'customer'}";
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Edit User"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: "Name")),
+            const SizedBox(height: 16),
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: "Email")),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: role,
+              items: const ["customer", "worker", "admin"]
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (v) => role = v ?? role,
+              decoration: const InputDecoration(labelText: "Role"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text("Save")),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await _patch("/admin/users/${u['id']}", {
+          "name": nameCtrl.text.trim(),
+          "email": emailCtrl.text.trim(),
+          "role": role,
+        });
+        _toast("User updated");
+        await _fetchUsers(page: usersPage);
+      } catch (e) {
+        _toast("Update failed: $e");
+      }
+    }
+  }
+
+  Future<void> _deleteUser(Map u) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Delete User"),
+        content: Text("Delete ${u['name'] ?? 'this user'}?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text("Delete")),
+        ],
+      ),
+    );
+    if (ok == true) {
+      try {
+        await _delete("/admin/users/${u['id']}");
+        _toast("User deleted");
+        if (users.length <= 1 && usersPage > 1) usersPage--;
+        await _fetchUsers(page: usersPage);
+      } catch (e) {
+        _toast("Delete failed: $e");
+      }
+    }
+  }
+
+  Future<void> _editWorkerDialog(Map w) async {
+    final skillCtrl = TextEditingController(text: "${w['skill'] ?? ''}");
+    final rateCtrl = TextEditingController(text: "${w['hourly_rate'] ?? 0}");
+    final expCtrl = TextEditingController(text: "${w['experience'] ?? 0}");
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Edit Worker"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: skillCtrl, decoration: const InputDecoration(labelText: "Skill")),
+            const SizedBox(height: 16),
+            TextField(controller: rateCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Hourly Rate")),
+            const SizedBox(height: 16),
+            TextField(controller: expCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Experience (years)")),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text("Save")),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await _patch("/admin/workers/${w['id']}", {
+          "skill": skillCtrl.text.trim(),
+          "hourly_rate": double.tryParse(rateCtrl.text) ?? 0,
+          "experience": int.tryParse(expCtrl.text) ?? 0,
+        });
+        _toast("Worker updated");
+        await _fetchWorkers(page: workersPage);
+      } catch (e) {
+        _toast("Update failed: $e");
+      }
+    }
+  }
+
+  Future<void> _editBookingDialog(Map b) async {
+    final titleCtrl = TextEditingController(text: "${b['job_title'] ?? ''}");
+    final dateCtrl = TextEditingController(text: "${b['date'] ?? ''}");
+    final timeCtrl = TextEditingController(text: "${b['time'] ?? ''}");
+    String status = "${b['status'] ?? 'pending'}";
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Edit Booking"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: "Title")),
+            const SizedBox(height: 16),
+            TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: "Date (YYYY-MM-DD)")),
+            const SizedBox(height: 16),
+            TextField(controller: timeCtrl, decoration: const InputDecoration(labelText: "Time (HH:MM)")),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: status,
+              items: const ["pending", "accepted", "completed", "cancelled"]
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (v) => status = v ?? status,
+              decoration: const InputDecoration(labelText: "Status"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text("Save")),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await _patch("/admin/bookings/${b['id']}", {
+          "job_title": titleCtrl.text.trim(),
+          "date": dateCtrl.text.trim(),
+          "time": timeCtrl.text.trim(),
+          "status": status,
+        });
+        _toast("Booking updated");
+        await _fetchBookings(page: bookingsPage);
+        await _fetchRevenue();
+      } catch (e) {
+        _toast("Update failed: $e");
+      }
+    }
+  }
+
+  // ================= UI HELPERS =================
+  Widget _pager({
+    required int page,
+    required bool hasNext,
+    required bool isLoading,
+    required VoidCallback onPrev,
+    required VoidCallback onNext,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text("Page $page", style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+          const SizedBox(width: 4),
+          IconButton(
+            onPressed: (page > 1 && !isLoading) ? onPrev : null,
+            icon: const Icon(Icons.chevron_left, size: 20),
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            onPressed: (hasNext && !isLoading) ? onNext : null,
+            icon: const Icon(Icons.chevron_right, size: 20),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _section(String title, Widget child, {List<Widget> actions = const []}) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
               const Spacer(),
-              IconButton(tooltip: "Refresh", onPressed: onRefreshTap, icon: const Icon(Icons.refresh)),
+              ...actions,
             ]),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             child,
           ],
         ),
@@ -207,73 +441,37 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _searchField(TextEditingController c, String hint, void Function(String) onChanged) {
-    return Expanded(
-      child: TextField(
-        controller: c,
-        decoration: InputDecoration(
-          hintText: hint,
-          prefixIcon: const Icon(Icons.search),
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        onChanged: onChanged,
-      ),
-    );
-  }
-
-  DropdownButton<String> _dropdown(String hint, String? value, List<String> items, ValueChanged<String?> onChanged) {
-    return DropdownButton<String>(
-      value: value,
-      hint: Text(hint),
-      items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  Widget _orderDropdown({
-    required String value,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return DropdownButton<String>(
-      value: value,
-      items: const ["asc", "desc"]
-          .map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase())))
-          .toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  Widget _loadMoreButton({required bool visible, required VoidCallback onPressed}) {
-    if (!visible) return const SizedBox.shrink();
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: onPressed,
-        icon: const Icon(Icons.keyboard_arrow_down),
-        label: const Text("Load more"),
-      ),
-    );
-  }
-
-  // -------- Build --------
+  // ================= BUILD =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Admin Dashboard")),
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text("Admin Dashboard"),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+      ),
       body: RefreshIndicator(
-        onRefresh: fetchAll,
+        onRefresh: _refreshAll,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              // Revenue
+              const SizedBox(height: 4),
               _section(
                 "Total Revenue",
-                _loadingRevenue
-                    ? const Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator())
-                    : Text("\$${revenue.toStringAsFixed(2)}", style: const TextStyle(fontSize: 18)),
-                _fetchRevenue,
+                loadingRevenue
+                    ? const LinearProgressIndicator()
+                    : Text("\$${revenue.toStringAsFixed(2)}", 
+                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600)),
+                actions: [
+                  IconButton(
+                    onPressed: _fetchRevenue,
+                    icon: const Icon(Icons.refresh, size: 20),
+                    visualDensity: VisualDensity.compact,
+                  )
+                ],
               ),
 
               // USERS
@@ -283,253 +481,468 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   children: [
                     Row(
                       children: [
-                        _searchField(_userSearch, "Search name/email", (v) {
-                          _debUsers?.cancel();
-                          _debUsers = Timer(const Duration(milliseconds: 350), () {
-                            _fetchUsers(reset: true);
-                          });
-                        }),
-                        const SizedBox(width: 8),
-                        _dropdown("Role", _roleFilter, const ["customer", "worker", "admin"], (v) {
-                          setState(() => _roleFilter = v);
-                          _fetchUsers(reset: true);
-                        }),
-                        const SizedBox(width: 8),
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _userSearch.clear();
-                              _roleFilter = null;
-                            });
-                            _fetchUsers(reset: true);
-                          },
-                          icon: const Icon(Icons.clear), label: const Text("Reset"),
+                        Expanded(
+                          child: TextField(
+                            controller: userSearch,
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              hintText: "Search name or email",
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            ),
+                            onChanged: (_) {
+                              debUsers?.cancel();
+                              debUsers = Timer(const Duration(milliseconds: 300), () => _fetchUsers(page: 1));
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            value: roleFilter,
+                            hint: const Text("Role", style: TextStyle(fontSize: 14)),
+                            underline: const SizedBox(),
+                            items: const ["customer", "worker", "admin"]
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => roleFilter = v);
+                              _fetchUsers(page: 1);
+                            },
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    if (_loadingUsers && users.isEmpty) const LinearProgressIndicator(),
-                    ...users.map((u) => ListTile(
-                          leading: const Icon(Icons.person),
-                          title: Text(u['name'] ?? "—"),
-                          subtitle: Text(u['email'] ?? "—"),
-                          trailing: Chip(label: Text(u['role'] ?? "—")),
+                    const SizedBox(height: 12),
+                    ...users.map((u) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.blue[50],
+                              child: Icon(Icons.person, color: Colors.blue[700], size: 20),
+                            ),
+                            title: Text(u['name'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w500)),
+                            subtitle: Text(u['email'] ?? '', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(u['role'] ?? '—', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 18),
+                                  onPressed: () => _editUserDialog(u),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  onPressed: () => _deleteUser(u),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
+                          ),
                         )),
-                    _loadMoreButton(
-                      visible: _usersHasNext,
-                      onPressed: () {
-                        _usersPage += 1;
-                        _fetchUsers();
-                      },
+                    _pager(
+                      page: usersPage,
+                      hasNext: usersHasNext,
+                      isLoading: loadingUsers,
+                      onPrev: () => _fetchUsers(page: usersPage - 1),
+                      onNext: () => _fetchUsers(page: usersPage + 1),
                     ),
-                    if (!_loadingUsers && users.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text("No users found."),
+                    if (!loadingUsers && users.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text("No users found", style: TextStyle(color: Colors.grey[500])),
                       ),
                   ],
                 ),
-                () => _fetchUsers(reset: true),
+                actions: [
+                  IconButton(
+                    onPressed: () => _fetchUsers(page: 1),
+                    icon: const Icon(Icons.refresh, size: 20),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
 
               // WORKERS
               _section(
                 "Workers",
                 Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    // LINE 1: skill + reset
-    Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        // Skill dropdown
-        DropdownButton<String>(
-          value: _skillFilter,
-          hint: const Text("Skill"),
-          isDense: true,
-          items: const ["plumber", "electrician", "cleaning", "hvac"]
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-              .toList(),
-          onChanged: (v) {
-            setState(() => _skillFilter = v);
-            _fetchWorkers(reset: true);
-          },
-        ),
-        TextButton.icon(
-          onPressed: () {
-            setState(() {
-              _skillFilter = null;
-              _workersSortBy = "rating";
-              _workersSortDir = "desc";
-            });
-            _fetchWorkers(reset: true);
-          },
-          icon: const Icon(Icons.clear),
-          label: const Text("Reset"),
-        ),
-      ],
-    ),
-
-    const SizedBox(height: 8),
-
-    // LINE 2: sort + order
-    Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        // Sort by (rating/name)
-        DropdownButton<String>(
-          value: _workersSortBy,
-          isDense: true,
-          items: const ["rating", "name"]
-              .map((e) => DropdownMenuItem(value: e, child: Text("Sort: $e")))
-              .toList(),
-          onChanged: (v) {
-            setState(() => _workersSortBy = v ?? "rating");
-            _fetchWorkers(reset: true);
-          },
-        ),
-        // Order (ASC/DESC)
-        DropdownButton<String>(
-          value: _workersSortDir,
-          isDense: true,
-          items: const ["asc", "desc"]
-              .map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase())))
-              .toList(),
-          onChanged: (v) {
-            setState(() => _workersSortDir = v ?? "desc");
-            _fetchWorkers(reset: true);
-          },
-        ),
-      ],
-    ),
-  ],
-),
-                    const SizedBox(height: 10),
-                    if (_loadingWorkers && workers.isEmpty) const LinearProgressIndicator(),
-                    ...workers.map((w) => ListTile(
-                          leading: const Icon(Icons.build),
-                          title: Text(w['name'] ?? "—"),
-                          subtitle: Text("${w['skill'] ?? "—"} • \$${(w['hourly_rate'] ?? 0).toString()} / hr"),
-                          trailing: Text("⭐ ${w['rating'] ?? 0}"),
-                        )),
-                    _loadMoreButton(
-                      visible: _workersHasNext,
-                      onPressed: () {
-                        _workersPage += 1;
-                        _fetchWorkers();
-                      },
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            value: skillFilter,
+                            hint: const Text("Skill", style: TextStyle(fontSize: 14)),
+                            underline: const SizedBox(),
+                            items: const ["plumber", "electrician", "cleaning", "hvac"]
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => skillFilter = v);
+                              _fetchWorkers(page: 1);
+                            },
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            value: workersSortBy,
+                            underline: const SizedBox(),
+                            items: const ["rating", "name"]
+                                .map((e) => DropdownMenuItem(value: e, child: Text("Sort: $e", style: TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => workersSortBy = v ?? "rating");
+                              _fetchWorkers(page: 1);
+                            },
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            value: workersSortDir,
+                            underline: const SizedBox(),
+                            items: const ["asc", "desc"]
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase(), style: TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => workersSortDir = v ?? "desc");
+                              _fetchWorkers(page: 1);
+                            },
+                          ),
+                        ),
+                        SizedBox(
+                          width: 200,
+                          child: TextField(
+                            controller: workerSearch,
+                            decoration: InputDecoration(
+                              hintText: "Search worker",
+                              isDense: true,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                            ),
+                            onChanged: (_) {
+                              debWorkers?.cancel();
+                              debWorkers = Timer(const Duration(milliseconds: 300),
+                                  () => _fetchWorkers(page: 1));
+                            },
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              workerSearch.clear();
+                              skillFilter = null;
+                              workersSortBy = "rating";
+                              workersSortDir = "desc";
+                            });
+                            _fetchWorkers(page: 1);
+                          },
+                          icon: const Icon(Icons.clear, size: 18),
+                          label: const Text("Reset", style: TextStyle(fontSize: 14)),
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                        ),
+                      ],
                     ),
-                    if (!_loadingWorkers && workers.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text("No workers found."),
+                    const SizedBox(height: 12),
+                    ...workers.map((w) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.orange[50],
+                              child: Icon(Icons.build, color: Colors.orange[700], size: 20),
+                            ),
+                            title: Text(w['name'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w500)),
+                            subtitle: Text(
+                              "${w['skill'] ?? '—'} • \$${(w['hourly_rate'] ?? 0)}/hr"
+                              "${w['experience'] != null ? ' • ${w['experience']} yrs' : ''}",
+                              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber[50],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.star, size: 14, color: Colors.amber),
+                                      const SizedBox(width: 4),
+                                      Text("${w['rating'] ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  tooltip: "Edit Worker",
+                                  icon: const Icon(Icons.edit_outlined, size: 18),
+                                  onPressed: () => _editWorkerDialog(w),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )),
+                    _pager(
+                      page: workersPage,
+                      hasNext: workersHasNext,
+                      isLoading: loadingWorkers,
+                      onPrev: () => _fetchWorkers(page: workersPage - 1),
+                      onNext: () => _fetchWorkers(page: workersPage + 1),
+                    ),
+                    if (!loadingWorkers && workers.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text("No workers found", style: TextStyle(color: Colors.grey[500])),
                       ),
                   ],
                 ),
-                () => _fetchWorkers(reset: true),
+                actions: [
+                  IconButton(
+                    onPressed: () => _fetchWorkers(page: 1),
+                    icon: const Icon(Icons.refresh, size: 20),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
 
               // BOOKINGS
               _section(
                 "Bookings",
                 Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    // LINE 1: status filter + reset
-    Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        DropdownButton<String>(
-          value: _statusFilter,
-          hint: const Text("Status"),
-          isDense: true,
-          items: const ["pending", "completed", "cancelled"]
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-              .toList(),
-          onChanged: (v) {
-            setState(() => _statusFilter = v);
-            _fetchBookings(reset: true);
-          },
-        ),
-        TextButton.icon(
-          onPressed: () {
-            setState(() {
-              _statusFilter = null;
-              _bookingsSortBy = "date";
-              _bookingsSortDir = "desc";
-            });
-            _fetchBookings(reset: true);
-          },
-          icon: const Icon(Icons.clear),
-          label: const Text("Reset"),
-        ),
-      ],
-    ),
-
-    const SizedBox(height: 8),
-
-    // LINE 2: sort field + sort direction
-    Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        DropdownButton<String>(
-          value: _bookingsSortBy,
-          isDense: true,
-          items: const ["date", "title", "status"]
-              .map((e) => DropdownMenuItem(value: e, child: Text("Sort: $e")))
-              .toList(),
-          onChanged: (v) {
-            setState(() => _bookingsSortBy = v ?? "date");
-            _fetchBookings(reset: true);
-          },
-        ),
-        DropdownButton<String>(
-          value: _bookingsSortDir,
-          isDense: true,
-          items: const ["asc", "desc"]
-              .map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase())))
-              .toList(),
-          onChanged: (v) {
-            setState(() => _bookingsSortDir = v ?? "desc");
-            _fetchBookings(reset: true);
-          },
-        ),
-      ],
-    ),
-  ],
-),
-                    const SizedBox(height: 10),
-                    if (_loadingBookings && bookings.isEmpty) const LinearProgressIndicator(),
-                    ...bookings.map((b) => ListTile(
-                          leading: const Icon(Icons.event_note),
-                          title: Text(b['job_title'] ?? "—"),
-                          subtitle: Text("Date: ${b['date']} ${b['time']}"),
-                          trailing: Chip(label: Text(b['status'] ?? "—")),
-                        )),
-                    _loadMoreButton(
-                      visible: _bookingsHasNext,
-                      onPressed: () {
-                        _bookingsPage += 1;
-                        _fetchBookings();
-                      },
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            value: statusFilter,
+                            hint: const Text("Status", style: TextStyle(fontSize: 14)),
+                            underline: const SizedBox(),
+                            items: const ["accepted", "completed"]
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => statusFilter = v);
+                              _fetchBookings(page: 1);
+                            },
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            value: bookingsSortBy,
+                            underline: const SizedBox(),
+                            items: const ["date", "title", "status"]
+                                .map((e) => DropdownMenuItem(value: e, child: Text("Sort: $e", style: TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => bookingsSortBy = v ?? "date");
+                              _fetchBookings(page: 1);
+                            },
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            value: bookingsSortDir,
+                            underline: const SizedBox(),
+                            items: const ["asc", "desc"]
+                                .map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase(), style: TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() => bookingsSortDir = v ?? "desc");
+                              _fetchBookings(page: 1);
+                            },
+                          ),
+                        ),
+                        SizedBox(
+                          width: 200,
+                          child: TextField(
+                            controller: bookingSearch,
+                            decoration: InputDecoration(
+                              hintText: "Search booking",
+                              isDense: true,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                            ),
+                            onChanged: (_) {
+                              debBookings?.cancel();
+                              debBookings = Timer(const Duration(milliseconds: 300),
+                                  () => _fetchBookings(page: 1));
+                            },
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              bookingSearch.clear();
+                              statusFilter = null;
+                              bookingsSortBy = "date";
+                              bookingsSortDir = "desc";
+                            });
+                            _fetchBookings(page: 1);
+                          },
+                          icon: const Icon(Icons.clear, size: 18),
+                          label: const Text("Reset", style: TextStyle(fontSize: 14)),
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                        ),
+                      ],
                     ),
-                    if (!_loadingBookings && bookings.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text("No bookings found."),
+                    const SizedBox(height: 12),
+                    ...bookings.map((b) {
+                      final title = b['job_title'] ?? b['title'] ?? "—";
+                      final date = b['date'] ?? "";
+                      final time = b['time'] ?? "";
+                      final status = b['status'] ?? "—";
+                      
+                      MaterialColor statusColor;
+                      switch (status.toLowerCase()) {
+                        case 'completed':
+                          statusColor = Colors.green;
+                          break;
+                        case 'accepted':
+                          statusColor = Colors.blue;
+                          break;
+                        case 'cancelled':
+                          statusColor = Colors.red;
+                          break;
+                        default:
+                          statusColor = Colors.orange;
+                      }
+                      
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.purple[50],
+                            child: Icon(Icons.event_note, color: Colors.purple[700], size: 20),
+                          ),
+                          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+                          subtitle: Text(
+                            (date.isEmpty && time.isEmpty) ? "—" : "$date $time",
+                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  status,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: statusColor.shade700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: "Edit Booking",
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                onPressed: () => _editBookingDialog(b),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    _pager(
+                      page: bookingsPage,
+                      hasNext: bookingsHasNext,
+                      isLoading: loadingBookings,
+                      onPrev: () => _fetchBookings(page: bookingsPage - 1),
+                      onNext: () => _fetchBookings(page: bookingsPage + 1),
+                    ),
+                    if (!loadingBookings && bookings.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text("No bookings found", style: TextStyle(color: Colors.grey[500])),
                       ),
                   ],
                 ),
-                () => _fetchBookings(reset: true),
+                actions: [
+                  IconButton(
+                    onPressed: () => _fetchBookings(page: 1),
+                    icon: const Icon(Icons.refresh, size: 20),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
             ],
           ),
         ),

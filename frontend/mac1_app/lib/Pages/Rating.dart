@@ -22,77 +22,157 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
   bool _isSubmitting = false;
 
   Future<void> submitRating() async {
-    if (_rating == 0) return;
+    if (_rating == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a rating")),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
-    final response = await http.post(
-      Uri.parse("http://192.168.1.12:8000/rate"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "customer_id": widget.customerId,
-        "worker_id": widget.workerId,
-        "rating": _rating,
-        "review": _reviewController.text.trim(),
-      }),
-    );
-
-    setState(() => _isSubmitting = false);
-
-    if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Rating submitted successfully")),
+    try {
+      final response = await http.post(
+        Uri.parse("http://192.168.1.12:8000/rate"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "customer_id": widget.customerId,
+          "worker_id": widget.workerId,
+          "rating": _rating,
+          "review": _reviewController.text.trim(),
+        }),
       );
-      Navigator.pop(context);
-    } else {
+
+      setState(() => _isSubmitting = false);
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Rating submitted")),
+        );
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to submit rating")),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to submit rating: ${response.body}")),
+        const SnackBar(content: Text("Error submitting rating")),
       );
     }
-  }
-
-  Widget buildStar(int index) {
-    return IconButton(
-      icon: Icon(
-        Icons.star,
-        color: index < _rating ? Colors.orange : Colors.grey,
-      ),
-      onPressed: () => setState(() => _rating = index + 1),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Rate Worker")),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Rate Worker"),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        foregroundColor: Colors.black,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Rate your experience", style: TextStyle(fontSize: 18)),
-            Row(children: List.generate(5, (index) => buildStar(index))),
-            const SizedBox(height: 20),
-            const Text("Leave a review (optional)"),
             const SizedBox(height: 8),
+            const Text(
+              "How was your experience?",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                final isFilled = index < _rating;
+                return GestureDetector(
+                  onTap: () => setState(() => _rating = index + 1),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Icon(
+                      isFilled ? Icons.star : Icons.star_outline,
+                      size: 44,
+                      color: isFilled ? Colors.amber : Colors.grey.shade400,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              "Leave a review (optional)",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _reviewController,
               maxLines: 4,
+              enabled: !_isSubmitting,
               decoration: InputDecoration(
-                hintText: "Write your review here...",
-                border: OutlineInputBorder(),
+                hintText: "Share your feedback...",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+                ),
+                contentPadding: const EdgeInsets.all(12),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : submitRating,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black87,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 0,
+                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text("Submit"),
               ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _isSubmitting ? null : submitRating,
-              child: _isSubmitting
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Submit Rating"),
-            )
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _reviewController.dispose();
+    super.dispose();
   }
 }

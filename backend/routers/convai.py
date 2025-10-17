@@ -57,10 +57,10 @@ INTENT_KEYWORDS = {
 }
 
 SKILL_KEYWORDS: Dict[Skill, List[str]] = {
-    "plumber":      [" leak ", " tap ", " pipe ", " clog ", " drain ", " water ", " plumb "],
-    "electrician":  [" electric ", " light ", " fuse ", " wire ", " short ", " fan ", " power "],
-    "cleaning":     [" clean ", " dust ", " vacuum ", " maid ", " tidy ", " sweep "],
-    "hvac":         [" ac ", " aircon ", " hvac ", " cooling ", " air conditioner ", " heat "],
+    "plumber":      [" leak ", " tap ", " pipe ", " clog ", " drain ", " water ", " plumb ","pipes","plumbing","faucet","faucets","toilet","sink","sinks","shower","bathtub","bathtubs"],
+    "electrician":  [" electric ", " light ", " fuse ", " wire ", " short ", " fan ", " power ","lights","wires","wiring","outlet","outlets","circuit","circuitry","fans"],
+    "cleaning":     [" clean ", " dust ", " vacuum ", " maid ", " tidy ", " sweep "," mop ","clean","cleaner","cleaning","housekeeping","housekeeper","janitor","janitorial"],
+    "hvac":         [" ac ", " aircon ", " hvac ", " cooling ", " air conditioner ", " heat ","heater","heating","ventilation","ventilator","furnace","thermostat","air conditioning"],
 }
 
 NUM_WORDS = {

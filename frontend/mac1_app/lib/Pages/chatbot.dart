@@ -17,7 +17,6 @@ class ChatScreen extends StatefulWidget {
     this.userLat,
     this.userLon,
     this.userAddress,
-
   });
 
   @override
@@ -32,7 +31,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scroll = ScrollController();
   final String _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
 
-  final List<_Msg> _messages = []; 
+  final List<_Msg> _messages = [];
   List<Map<String, dynamic>> _suggestions = [];
   double? _lat, _lon;
   String? _address;
@@ -48,7 +47,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _ensureLocation() async {
-    // If already have coords, try to reverse-geocode once (optional).
     if (_lat != null && _lon != null && _address == null) {
       try {
         final placemarks = await placemarkFromCoordinates(_lat!, _lon!);
@@ -69,7 +67,6 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    // Otherwise, fetch fresh coords.
     final enabled = await Geolocator.isLocationServiceEnabled();
     if (!enabled) {
       await Geolocator.openLocationSettings();
@@ -131,7 +128,6 @@ class _ChatScreenState extends State<ChatScreen> {
       _busy = true;
     });
 
-    // If we don't have location yet, try to fetch once.
     if (_lat == null || _lon == null) {
       await _ensureLocation();
     }
@@ -144,7 +140,7 @@ class _ChatScreenState extends State<ChatScreen> {
           "session_id": _sessionId,
           "message": text,
           "user_id": widget.userId,
-          "user_lat": _lat, 
+          "user_lat": _lat,
           "user_lon": _lon,
         }),
       );
@@ -174,16 +170,16 @@ class _ChatScreenState extends State<ChatScreen> {
           final params = (redirect["params"] is Map<String, dynamic>)
               ? (redirect["params"] as Map<String, dynamic>)
               : <String, dynamic>{};
-            if (widget.userId != null) {
-              params["customerId"] = widget.userId;
-            }
-            if (_lat != null && _lon != null) {
-              params["customer_lat"] = _lat;
-              params["customer_lon"] = _lon;
-            }
-            if (_address != null) {
-              params["customerAddress"] = _address;
-            }
+          if (widget.userId != null) {
+            params["customerId"] = widget.userId;
+          }
+          if (_lat != null && _lon != null) {
+            params["customer_lat"] = _lat;
+            params["customer_lon"] = _lon;
+          }
+          if (_address != null) {
+            params["customerAddress"] = _address;
+          }
           try {
             if (!mounted) return;
             Navigator.pushNamed(context, path, arguments: params);
@@ -236,17 +232,25 @@ class _ChatScreenState extends State<ChatScreen> {
         : "Location not shared";
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Assistant"),
+        title: const Text("Assistant", style: TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        foregroundColor: Colors.black87,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(24),
+          preferredSize: const Size.fromHeight(20),
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              locLine,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: hasLoc ? Colors.white70 : Colors.amberAccent,
-                  ),
+            padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                locLine,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: hasLoc ? Colors.grey.shade600 : Colors.amber.shade700,
+                ),
+              ),
             ),
           ),
         ),
@@ -254,14 +258,28 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           if (!hasLoc)
-            MaterialBanner(
-              content: const Text("I can’t find nearby workers without your location."),
-              actions: [
-                TextButton(
-                  onPressed: _ensureLocation,
-                  child: const Text("Share now"),
-                ),
-              ],
+            Container(
+              color: Colors.amber.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.location_off, size: 18, color: Colors.amber.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Share your location to find nearby workers",
+                      style: TextStyle(fontSize: 14, color: Colors.amber.shade900),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _ensureLocation,
+                    child: Text(
+                      "Enable",
+                      style: TextStyle(color: Colors.amber.shade700, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
             ),
           Expanded(
             child: ListView.builder(
@@ -271,47 +289,51 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, i) {
                 if (i < _messages.length) {
                   final m = _messages[i];
-                  final align = m.role == "user" ? Alignment.centerRight : Alignment.centerLeft;
-                  final color  = m.role == "user"
-                      ? Theme.of(context).colorScheme.primary
-                      : Colors.grey.shade200;
-                  final txtCol = m.role == "user" ? Colors.white : Colors.black87;
+                  final isUser = m.role == "user";
                   return Align(
-                    alignment: align,
+                    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                       decoration: BoxDecoration(
-                        color: color,
+                        color: isUser ? Colors.black87 : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(m.text, style: TextStyle(color: txtCol)),
+                      child: Text(
+                        m.text,
+                        style: TextStyle(
+                          color: isUser ? Colors.white : Colors.black87,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   );
                 } else {
-                  // suggestions card list
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       ..._suggestions.asMap().entries.map((e) {
-                        final idx = e.key; 
+                        final idx = e.key;
                         final s = e.value;
                         final name = (s["name"] ?? "—").toString();
                         final rating = (s["rating"] ?? 0).toString();
                         final dist = (s["distance"] ?? "-").toString();
                         final rate = (s["hourly_rate"] ?? "-").toString();
 
-                        return Card(
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           child: ListTile(
-                            leading: const Icon(Icons.build),
-                            title: Text(name),
-                            subtitle: Text("⭐ $rating • $dist km • \$$rate/hr"),
-                            trailing: TextButton(
-                              onPressed: () => _send("${idx + 1}"),
-                              child: const Text("Request"),
-                            ),
+                            leading: Icon(Icons.build_outlined, color: Colors.grey.shade600),
+                            title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                            subtitle: Text("⭐ $rating • $dist km • \$$rate/hr", style: const TextStyle(fontSize: 12)),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                             onTap: () => _send("${idx + 1}"),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
                         );
                       }),
@@ -322,26 +344,58 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           SafeArea(
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    onSubmitted: _send,
-                    decoration: const InputDecoration(
-                      hintText: "Type a message…",
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      onSubmitted: _send,
+                      enabled: !_busy,
+                      decoration: InputDecoration(
+                        hintText: "Type a message…",
+                        hintStyle: TextStyle(color: Colors.grey.shade500),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        isDense: true,
+                      ),
+                      style: const TextStyle(fontSize: 14),
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.send),
-                  onPressed: _busy ? null : () => _send(_controller.text),
-                )
-              ],
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: IconButton(
+                      icon: _busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.send, color: Colors.white, size: 20),
+                      onPressed: _busy ? null : () => _send(_controller.text),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
