@@ -1,15 +1,14 @@
-# backend/routers/jobs.py
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 
 from ..database import SessionLocal
 from ..models import User, Worker, Booking, Rating, JobRequest
+from ..notifications import send_to_token
 
-router = APIRouter(tags=["Jobs"])  # keep original paths (no prefix change)
+router = APIRouter(tags=["Jobs"])  
 
-
-# --------- Pydantic payloads (same as your main.py) ---------
 class JobRequestData(BaseModel):
     customer_id: int
     worker_id: int
@@ -35,7 +34,7 @@ class JobCompleteData(BaseModel):
     reason: str
 
 
-# -------------------- Routes (unchanged behavior) --------------------
+# -------------------- Routes --------------------
 
 @router.post("/request_job/")
 def request_job(data: JobRequestData):
@@ -53,7 +52,17 @@ def request_job(data: JobRequestData):
         db.commit()
         db.refresh(job)
 
-    
+        worker_user = db.query(User).filter(User.id == job.worker_id).first()
+        if worker_user and worker_user.fcm_token:
+            send_to_token(
+                worker_user.fcm_token,
+                "New Job Request",
+                f"You received a request from customer #{job.customer_id}",
+                data={
+                    "route": "/incomingRequests",
+                    "workerId": str(job.worker_id)
+                }
+            )
 
         return {"message": "Job request submitted", "job_id": job.id}
     except Exception as e:
@@ -77,8 +86,17 @@ def respond_to_job(job_id: int, decision: str):
         job.status = decision
         db.commit()
 
-        # (your original code fetched customer; side-effects omitted)
-        # customer = db.query(User).filter(User.id == job.customer_id).first()
+        if decision == "accepted":
+            customer_user = db.query(User).filter(User.id == job.customer_id).first()
+            if customer_user and customer_user.fcm_token:
+                send_to_token(
+                    customer_user.fcm_token,
+                    "Request Accepted ",
+                    f"Your request was accepted by worker #{job.worker_id}",
+                    data={
+                        "route": "/acceptedWorkerList"
+                    }
+                )
 
         return {"message": f"Job {decision} successfully"}
     finally:
@@ -102,7 +120,7 @@ def create_booking(data: BookingCreate):
         db.commit()
         db.refresh(booking)
 
-        # Remove accepted job_request between same customer & worker (same as your code)
+        # Remove accepted job_request between same customer & worker
         job_request = (
             db.query(JobRequest)
             .filter(
@@ -116,8 +134,33 @@ def create_booking(data: BookingCreate):
             db.delete(job_request)
             db.commit()
 
-        # (your original code fetched worker user; side-effects omitted)
-        # worker = db.query(User).filter(User.id == data.worker_id).first()
+        # Notify both parties about booking creation
+        customer_user = db.query(User).filter(User.id == booking.customer_id).first()
+        worker_user = db.query(User).filter(User.id == booking.worker_id).first()
+
+        # Customer: booking created
+        if customer_user and customer_user.fcm_token:
+            send_to_token(
+                customer_user.fcm_token,
+                "Booking Created ",
+                f"{booking.job_title} on {booking.date.isoformat()} at {booking.time.strftime('%H:%M')}",
+                data={
+                    # Adjust to your desired landing page after booking
+                    "route": "/completedJobList"  # or "/customerHome"
+                }
+            )
+
+        # Worker: you’re booked
+        if worker_user and worker_user.fcm_token:
+            send_to_token(
+                worker_user.fcm_token,
+                "New Booking Confirmed ",
+                f"{booking.job_title} on {booking.date.isoformat()} at {booking.time.strftime('%H:%M')}",
+                data={
+                    "route": "/pendingJobs",
+                    "workerId": str(booking.worker_id)
+                }
+            )
 
         return {"message": "Booking created successfully", "booking_id": booking.id}
 
@@ -135,16 +178,43 @@ def complete_booking(data: JobCompleteData):
         booking = db.query(Booking).filter(Booking.id == data.booking_id).first()
         if not booking:
             raise HTTPException(status_code=404, detail="Booking not found")
+        worker = db.query(Worker).filter(Worker.user_id == booking.worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
 
         booking.status = "completed"
         booking.time_taken = data.duration_hours
         booking.extra_cost = data.additional_cost
         booking.extra_reason = data.reason
+
+        service_cost = worker.hourly_rate * data.duration_hours
+        commission = 0.10 * service_cost
+        worker_earning = service_cost - commission + data.additional_cost
+        worker.money_earned += worker_earning
         db.commit()
         db.refresh(booking)
 
-        # (your original code fetched customer; side-effects omitted)
-        # customer = db.query(User).filter(User.id == booking.customer_id).first()
+        customer_user = db.query(User).filter(User.id == booking.customer_id).first()
+        if customer_user and customer_user.fcm_token:
+            send_to_token(
+                customer_user.fcm_token,
+                "Job Completed ",
+                f"View payslip for {booking.job_title}",
+                data={
+                    "route": "/payslip",
+                    "bookingId": str(booking.id)
+                }
+            )
+            send_to_token(
+                customer_user.fcm_token,
+                "Rate Your Worker",
+                "Share feedback to help improve service quality",
+                data={
+                    "route": "/rate",
+                    "customerId": str(booking.customer_id),
+                    "workerId": str(booking.worker_id)
+                }
+            )
 
         return {"message": "Booking marked as completed successfully"}
     except Exception as e:

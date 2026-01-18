@@ -8,7 +8,6 @@ from ..models import User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-# ---------- Schemas ----------
 class SignupData(BaseModel):
     name: str
     age: int
@@ -26,13 +25,15 @@ class AuthResponse(BaseModel):
     user_id: int
     role: str
 
+class UpdateTokenPayload(BaseModel):
+    user_id: int
+    fcm_token: str
 
-# ---------- Helpers ----------
+
 def _get_db() -> Session:
     return SessionLocal()
 
 
-# ---------- Routes ----------
 @router.post("/signup", response_model=AuthResponse)
 def signup(data: SignupData):
     db = _get_db()
@@ -73,3 +74,17 @@ def login(data: LoginData):
         return AuthResponse(message="Login successful", user_id=user.id, role=user.role)
     finally:
         db.close()
+
+@router.post("/update_token")
+def update_token(payload: UpdateTokenPayload):
+    db = _get_db()
+    try:
+        user = db.query(User).get(payload.user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.fcm_token = payload.fcm_token
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+

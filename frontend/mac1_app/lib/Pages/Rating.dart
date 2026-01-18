@@ -67,26 +67,14 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Rate Worker"),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: Colors.black,
-      ),
+      appBar: AppBar(title: const Text("Rate Worker"),backgroundColor: Colors.white,elevation: 0,foregroundColor: Colors.black,),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-            const Text(
-              "How was your experience?",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
+            const Text("How was your experience?",style: TextStyle(fontSize: 20,fontWeight: FontWeight.w600,color: Colors.black87,),),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -94,8 +82,7 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
                 final isFilled = index < _rating;
                 return GestureDetector(
                   onTap: () => setState(() => _rating = index + 1),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Icon(
                       isFilled ? Icons.star : Icons.star_outline,
                       size: 44,
@@ -106,14 +93,7 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
               }),
             ),
             const SizedBox(height: 32),
-            const Text(
-              "Leave a review (optional)",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
+            const Text("Leave a review (optional)",style: TextStyle(fontSize: 16,fontWeight: FontWeight.w600,color: Colors.black87,),),
             const SizedBox(height: 12),
             TextField(
               controller: _reviewController,
@@ -121,18 +101,9 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
               enabled: !_isSubmitting,
               decoration: InputDecoration(
                 hintText: "Share your feedback...",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),borderSide: BorderSide(color: Colors.grey.shade300),),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),borderSide: BorderSide(color: Colors.grey.shade300),),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),borderSide: BorderSide(color: Colors.grey.shade400, width: 1),),
                 contentPadding: const EdgeInsets.all(12),
                 isDense: true,
               ),
@@ -143,8 +114,7 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _isSubmitting ? null : submitRating,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black87,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.black87,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -152,16 +122,11 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
                   ),
                   elevation: 0,
                 ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text("Submit"),
+                child: _isSubmitting ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2,valueColor: AlwaysStoppedAnimation<Color>(Colors.white),), ) 
+                  : const Text("Submit"),
               ),
             ),
           ],

@@ -6,8 +6,10 @@ from pydantic import BaseModel
 from ..database import SessionLocal
 from ..models import User, Worker, Booking, Rating, JobRequest
 from ..utils import calc_distance
+from ..notifications import send_to_token
 
-router = APIRouter(tags=["Workers"])  # keep original paths as-is
+
+router = APIRouter(tags=["Workers"]) 
 
 class WorkerInfo(BaseModel):
     user_id: int
@@ -124,23 +126,34 @@ def get_completed_jobs(worker_id: int):
 @router.post("/rate")
 def rate_worker(data: dict):
     db = SessionLocal()
-    if data["rating"] < 1 or data["rating"] > 5:
+    try:
+        if data["rating"] < 1 or data["rating"] > 5:
+            raise HTTPException(status_code=400, detail="Rating must be between 1 to 5")
+
+        new_rating = Rating(
+            customer_id=data["customer_id"],
+            worker_id=data["worker_id"],
+            rating=data["rating"],
+            review=data.get("review", "")
+        )
+        db.add(new_rating)
+        db.commit()
+        db.refresh(new_rating)
+        worker_user = db.query(User).filter(User.id == data["worker_id"]).first()
+        if worker_user and worker_user.fcm_token:
+            send_to_token(
+                worker_user.fcm_token,
+                "New Rating Received",
+                f"You received {data['rating']}★" + (f" — \"{data.get('review','')}\"" if data.get('review') else ""),
+                data={
+                    "route": "/workerHome",
+                    "workerId": str(data["worker_id"])
+                }
+            )
+
+        return {"message": "rating Succesfully Submitted"}
+    finally:
         db.close()
-        raise HTTPException(status_code=400, detail="Rating must be between 1 to 5")
-
-    new_rating = Rating(
-        customer_id=data["customer_id"],
-        worker_id=data["worker_id"],
-        rating=data["rating"],
-        review=data.get("review", "")
-    )
-    db.add(new_rating)
-    db.commit()
-    db.refresh(new_rating)
-    db.close()
-
-    return {"message": "rating Succesfully Submitted"}
-
 
 @router.get("/worker_rating/{worker_id}")
 def get_worker_rating(worker_id: int):
@@ -206,6 +219,10 @@ def get_workers_by_skill(skill: str, customer_lat: float, customer_lon: float):
 def get_incoming_requests(worker_id: int):
     db = SessionLocal()
     try:
+        worker = db.query(Worker).filter(Worker.user_id == worker_id).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
         requests = (
             db.query(JobRequest, User)
             .join(User, JobRequest.customer_id == User.id)
@@ -216,12 +233,62 @@ def get_incoming_requests(worker_id: int):
 
         result = []
         for job, customer in requests:
+            distance_km = calc_distance(
+                worker.latitude,
+                worker.longitude,
+                job.customer_lat,
+                job.customer_lon
+            )
+
             result.append({
                 "job_id": job.id,
                 "description": job.description,
                 "preferred_datetime": job.preferred_datetime.strftime("%Y-%m-%d %H:%M"),
                 "customer_name": customer.name,
+                "customer_lat": job.customer_lat,
+                "customer_lon": job.customer_lon,
+                "distance": round(distance_km, 1),
             })
         return result
     finally:
         db.close()
+
+
+@router.get("/worker/{worker_id}/wallet")
+def get_wallet(worker_user_id: int, limit: int = 10):
+    db: Session = SessionLocal()
+    try:
+        worker = db.query(Worker).filter(Worker.user_id == worker_user_id).first()
+        if not worker:
+            return {"money_earned": 0.0, "transactions": []}
+
+        bookings = (
+            db.query(Booking)
+            .filter(Booking.worker_id == worker_user_id, Booking.status == "completed")
+            .order_by(desc(Booking.created_at))
+            .limit(limit)
+            .all()
+        )
+
+        tx = []
+        for b in bookings:
+            time_taken = float(b.time_taken or 0.0)
+            extra_cost = float(b.extra_cost or 0.0)
+            amount = (time_taken * float(worker.hourly_rate or 0.0)) + extra_cost
+
+            tx.append({
+                "booking_id": b.id,
+                "job_title": b.job_title,
+                "date": b.date.isoformat() if b.date else None,
+                "time": b.time.strftime("%H:%M") if b.time else None,
+                "amount": round(amount, 2),
+                "extra_reason": b.extra_reason,
+            })
+
+        return {
+            "money_earned": float(worker.money_earned or 0.0),
+            "transactions": tx
+        }
+    finally:
+        db.close()
+

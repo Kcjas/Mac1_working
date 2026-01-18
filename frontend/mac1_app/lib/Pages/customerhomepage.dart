@@ -124,7 +124,6 @@ class _CustomerhpState extends State<Customerhp> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Profile Card
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -223,7 +222,6 @@ class _CustomerhpState extends State<Customerhp> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Help Button
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -281,8 +279,7 @@ class _CustomerhpState extends State<Customerhp> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Services Section
+                  
                   const Text(
                     "Select a Service",
                     style: TextStyle(
@@ -308,11 +305,9 @@ class _CustomerhpState extends State<Customerhp> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Accepted Worker Section
                   if (_currentPosition != null) ...[
                     _buildSectionCard(
                       title: "Accepted Workers",
-                      icon: Icons.engineering,
                       child: AcceptedWorkerPage(
                         customerId: widget.userId,
                         customerLat: _currentPosition!.latitude,
@@ -322,18 +317,14 @@ class _CustomerhpState extends State<Customerhp> {
                     const SizedBox(height: 16),
                   ],
 
-                  // Pending Bookings
                   _buildSectionCard(
                     title: "Upcoming Bookings",
-                    icon: Icons.pending_actions,
                     child: CustomerBookingPreview(userId: widget.userId),
                   ),
                   const SizedBox(height: 16),
 
-                  // Completed Bookings
                   _buildSectionCard(
                     title: "Completed Services",
-                    icon: Icons.check_circle_outline,
                     child: CustomerCompletedBookingPreview(userId: widget.userId),
                   ),
                   const SizedBox(height: 20),
@@ -366,7 +357,6 @@ class _CustomerhpState extends State<Customerhp> {
 
   Widget _buildSectionCard({
     required String title,
-    required IconData icon,
     required Widget child,
   }) {
     return Container(
@@ -388,7 +378,6 @@ class _CustomerhpState extends State<Customerhp> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(icon, color: Colors.blue.shade600, size: 24),
                 const SizedBox(width: 12),
                 Text(
                   title,

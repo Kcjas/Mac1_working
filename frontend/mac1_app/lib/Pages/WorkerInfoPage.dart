@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import '../services/location_service.dart';
 
 class WorkerInfoPage extends StatefulWidget {
-  final int userId;                           
+  final int userId;
   const WorkerInfoPage({Key? key, required this.userId}) : super(key: key);
 
   @override
@@ -13,19 +13,22 @@ class WorkerInfoPage extends StatefulWidget {
 }
 
 class _WorkerInfoPageState extends State<WorkerInfoPage> {
-  final _formKey             = GlobalKey<FormState>();
-  final _skillController      = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final _skillController = TextEditingController();
   final _experienceController = TextEditingController();
   final _hourlyrateController = TextEditingController();
+  bool _isSubmitting = false;
 
   final List<String> allowedSkills = ['plumber', 'hvac', 'electrician', 'cleaning'];
 
   Future<void> _submitWorkerInfo() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final skill       = _skillController.text.toLowerCase().trim();
-    final experience  = int.tryParse(_experienceController.text) ?? 0;
-    final hourlyRate  = double.tryParse(_hourlyrateController.text)??0.0;          
+    setState(() => _isSubmitting = true);
+
+    final skill = _skillController.text.toLowerCase().trim();
+    final experience = int.tryParse(_experienceController.text) ?? 0;
+    final hourlyRate = double.tryParse(_hourlyrateController.text) ?? 0.0;
 
     try {
       final pos = await LocationService.getCurrentLocation();
@@ -34,14 +37,16 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
         Uri.parse('http://192.168.1.12:8000/worker_info'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'user_id'    : widget.userId,        
-          'skill'      : skill,
-          'experience' : experience,
+          'user_id': widget.userId,
+          'skill': skill,
+          'experience': experience,
           'hourly_rate': hourlyRate,
-          'latitude'   : pos.latitude,
-          'longitude'  : pos.longitude,
+          'latitude': pos.latitude,
+          'longitude': pos.longitude,
         }),
       );
+
+      if (!mounted) return;
 
       if (res.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -55,27 +60,61 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connection error: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Connection error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _skillController.dispose();
+    _experienceController.dispose();
+    _hourlyrateController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Complete Worker Info')),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Worker Info'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        foregroundColor: Colors.black,
+      ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           child: Form(
             key: _formKey,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const SizedBox(height: 20),
                 TextFormField(
                   controller: _skillController,
-                  decoration: const InputDecoration(
-                    labelText: 'Skill (plumber, electrician, cleaning, hvac)',
+                  enabled: !_isSubmitting,
+                  decoration: InputDecoration(
+                    labelText: 'Skill',
+                    hintText: 'plumber, electrician, cleaning, hvac',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade400),
+                    ),
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Please enter your skill';
@@ -85,10 +124,26 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: _experienceController,
-                  decoration: const InputDecoration(labelText: 'Experience (years)'),
+                  enabled: !_isSubmitting,
                   keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Experience (years)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade400),
+                    ),
+                  ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Enter experience';
                     final exp = int.tryParse(v);
@@ -96,18 +151,54 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: _hourlyrateController,
-                  decoration: const InputDecoration(labelText: "Hourly Rate"),
-                  validator: (v){
-                    if(v == null || v.isEmpty) return 'Enter Hourly rate';
+                  enabled: !_isSubmitting,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: 'Hourly Rate',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade400),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Enter hourly rate';
                     final rate = double.tryParse(v);
-                    if(v == null)return "Enter valid rate";
+                    if (rate == null) return 'Enter a valid rate';
                     return null;
                   },
                 ),
-                const SizedBox(height: 30),
-                ElevatedButton(onPressed: _submitWorkerInfo, child: const Text('Submit')),
+                const SizedBox(height: 28),
+                ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submitWorkerInfo,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black87,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0,
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text('Submit', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                ),
               ],
             ),
           ),

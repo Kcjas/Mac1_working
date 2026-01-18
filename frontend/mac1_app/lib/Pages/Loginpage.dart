@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../services/notification.dart';
 
 class Loginpage extends StatefulWidget {
   const Loginpage({super.key});
@@ -37,6 +38,9 @@ class _LoginpageState extends State<Loginpage> {
           final data = jsonDecode(response.body);
           final role = data['role'];
           final userId = data['user_id'];
+
+          await NotificationService.I.registerTokenWithBackend(userId);
+
 
           if (role == 'customer') {
             Navigator.pushReplacementNamed(context, '/customerHome', arguments: userId);

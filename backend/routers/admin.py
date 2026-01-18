@@ -215,23 +215,16 @@ def update_booking(booking_id: int, payload: dict):
     finally:
         db.close()
 
-
-# ---------------- REVENUE ----------------
 @router.get("/revenue")
 def get_revenue():
     db = SessionLocal()
     try:
         completed = db.query(Booking).filter(Booking.status == "completed").all()
-        total = 0.0
+        total_commission = 0.0
         for b in completed:
-            rate = (
-                db.query(Worker.hourly_rate)
-                .filter(Worker.user_id == b.worker_id)
-                .scalar()
-                or 0.0
-            )
+            rate = db.query(Worker.hourly_rate).filter(Worker.user_id == b.worker_id).scalar() or 0.0
             hours = b.time_taken or 0.0
-            total += rate * hours * 0.10  # 10% commission
-        return {"total_revenue": round(total, 2)}
+            total_commission += rate * hours * 0.10
+        return {"total_commission_earned": round(total_commission, 2)}
     finally:
         db.close()

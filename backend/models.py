@@ -28,6 +28,7 @@ class Worker(Base):
     latitude = Column(Float)
     longitude = Column(Float)
     hourly_rate = Column(Float)
+    money_earned = Column(Float, default=0.0)
 
     user = relationship("User", back_populates="worker")
 

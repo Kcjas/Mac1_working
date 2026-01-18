@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/api_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -11,9 +12,6 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  static const String scheme = "http";
-  static const String host = "192.168.1.12"; 
-  static const int port = 8000;
   static const int usersLimit = 5;
   static const int workersLimit = 5;
   static const int bookingsLimit = 5;
@@ -29,9 +27,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (v != null && v.trim().isNotEmpty) qp[k] = v.trim();
     });
     return Uri(
-      scheme: scheme,
-      host: host,
-      port: port,
+      host: BASE_URL,
       path: path.startsWith("/") ? path : "/$path",
       queryParameters: qp.isEmpty ? null : qp,
     );

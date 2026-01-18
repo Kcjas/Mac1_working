@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'Pages/Loginpage.dart';
 import 'Pages/Signuppage.dart';
 import 'Pages/WorkerInfoPage.dart';
@@ -16,6 +17,7 @@ import 'Pages/Rating.dart';
 import 'Pages/chatbot.dart';
 import 'Pages/admin_dashboard.dart';
 import 'Pages/jobrequest.dart';
+import 'Pages/wallet.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
@@ -26,18 +28,49 @@ import 'dart:convert';
 
 const String BASE_URL = "http://192.168.1.12:8000";
 
-// OPTIONAL: background message handler (Android)
+final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // If you add local notifications later, you can show something here.
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final notification = message.notification;
+  if (notification != null) {await _local.show(
+    0,
+    notification.title,
+    notification.body,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'mac1_default', 'General',
+        importance: Importance.high,
+        priority: Priority.high,        
+      ),
+      iOS: DarwinNotificationDetails(),
+      ),
+    );}
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // FCM init
+  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const iosInit = DarwinInitializationSettings();
+  const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+  await _local.initialize(initSettings);
+
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'mac1_default',
+    'General',
+    description: 'General notifications',
+    importance: Importance.high,
+  );
+  await _local
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   await _initFcm();
 
   runApp(const MyApp());
@@ -46,30 +79,37 @@ Future<void> main() async {
 Future<void> _initFcm() async {
   final fm = FirebaseMessaging.instance;
 
-  // Ask permission (Android 13+/iOS/Web)
-  await fm.requestPermission();
+  await fm.requestPermission(alert: true, badge: true, sound: true);
 
-  // For Web you may need vapidKey: await fm.getToken(vapidKey: "YOUR_WEB_PUSH_VAPID_PUBLIC_KEY");
   final token = await fm.getToken();
   debugPrint("FCM TOKEN => $token");
 
-  // Foreground message listener
-  FirebaseMessaging.onMessage.listen((m) {
-    debugPrint("Push (FG): ${m.notification?.title} — ${m.notification?.body}");
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+    debugPrint("Foreground notification: ${message.notification?.title}");
+    final notification = message.notification;
+    if (notification != null) {
+      await _local.show(
+        0,
+        notification.title,
+        notification.body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'mac1_default', 'General',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+      );
+    }
   });
 
-  // Token refresh listener
   FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
     debugPrint("FCM TOKEN REFRESHED => $newToken");
-    // If user is logged in, call registerFcmToken again with newToken.
-    // (You can store the userId in shared prefs after login.)
   });
 }
 
-Future<void> registerFcmToken({
-  required int userId,
-  required String token,
-}) async {
+Future<void> _registerTokenWithBackend(int userId, String token) async {
   final url = Uri.parse("$BASE_URL/auth/update_token");
   await http.post(
     url,
@@ -146,13 +186,11 @@ class MyApp extends StatelessWidget {
 
           case '/wallet':
             final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => const Placeholder());
+            return MaterialPageRoute(builder: (_) => WalletPage(workerId: userId));
 
           case '/acceptedWorkerList':
-            final userId = settings.arguments as int;
-            return MaterialPageRoute(
-              builder: (_) => AcceptedWorkersFull(userId: userId),
-            );
+            final args = settings.arguments as Map<String, dynamic>;
+            return MaterialPageRoute(builder: (_) => AcceptedWorkersFull(userId: args['customer_id'],customerLat: args['customer_lat'] , customerLon: args['customer_lon']),);
 
           case '/completedJobs':
             final args = settings.arguments as Map<String,dynamic>;
@@ -201,7 +239,7 @@ class MyApp extends StatelessWidget {
               customerAddress: args['customerAddress'] as String,
               problem: args['problem']! as String,
             ));
-
+            
           default:
             return MaterialPageRoute(
               builder: (_) => Scaffold(

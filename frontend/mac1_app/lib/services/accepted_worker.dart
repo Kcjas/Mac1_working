@@ -30,7 +30,7 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
   Future<void> _loadWorkers() async {
     try {
       final res = await http.get(
-        Uri.parse('http://192.168.1.12/customer/${widget.customerId}/accepted-workers'),
+        Uri.parse('http://192.168.1.12:8000/customer/${widget.customerId}/accepted-workers'),
       );
       if (mounted) {
         setState(() {
@@ -176,23 +176,6 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
                         const Spacer(),
                         Row(
                           children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.pushNamed(
-                                  context,
-                                  '/acceptedWorkerList',
-                                  arguments: widget.customerId,
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: Colors.purple.shade600),
-                                  foregroundColor: Colors.purple.shade600,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: const Text('Details'),
-                              ),
-                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: ElevatedButton(
@@ -239,7 +222,11 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
             Navigator.pushNamed(
               context,
               '/acceptedWorkerList',
-              arguments: widget.customerId,
+              arguments: {
+              'customer_id': widget.customerId,
+              'customer_lat': widget.customerLat,
+              'customer_lon': widget.customerLon,
+              }
             );
           },
           child: Padding(
