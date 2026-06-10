@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
+
 import 'Pages/Loginpage.dart';
 import 'Pages/Signuppage.dart';
 import 'Pages/WorkerInfoPage.dart';
@@ -15,38 +19,22 @@ import 'Pages/customercompletedjobs.dart';
 import 'Pages/finalPaySlip.dart';
 import 'Pages/Rating.dart';
 import 'Pages/chatbot.dart';
+import 'Pages/chat_thread.dart';
+import 'Pages/chats_list.dart';
 import 'Pages/admin_dashboard.dart';
 import 'Pages/jobrequest.dart';
 import 'Pages/wallet.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-
-
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-
-const String BASE_URL = "http://192.168.1.12:8000";
+import 'Pages/CustomerUpcomingBookingsPage.dart';
+import 'Pages/WorkerCompletedBookingsPage.dart';
+import 'Pages/settings_page.dart';
+import 'services/auth_manager.dart';
 
 final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  final notification = message.notification;
-  if (notification != null) {await _local.show(
-    0,
-    notification.title,
-    notification.body,
-    const NotificationDetails(
-      android: AndroidNotificationDetails(
-        'mac1_default', 'General',
-        importance: Importance.high,
-        priority: Priority.high,        
-      ),
-      iOS: DarwinNotificationDetails(),
-      ),
-    );}
+  // Optional: handle background message
 }
 
 Future<void> main() async {
@@ -56,6 +44,7 @@ Future<void> main() async {
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
   const iosInit = DarwinInitializationSettings();
   const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+  
   await _local.initialize(initSettings);
 
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -64,37 +53,37 @@ Future<void> main() async {
     description: 'General notifications',
     importance: Importance.high,
   );
+  
   await _local
-      .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(channel);
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   await _initFcm();
 
+  // Restore any persisted session (validates the stored JWT against the backend)
+  // before the first frame so AuthGate can route to the right screen.
+  await AuthManager.instance.init();
+
   runApp(const MyApp());
 }
 
 Future<void> _initFcm() async {
   final fm = FirebaseMessaging.instance;
-
   await fm.requestPermission(alert: true, badge: true, sound: true);
 
-  final token = await fm.getToken();
-  debugPrint("FCM TOKEN => $token");
-
   FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-    debugPrint("Foreground notification: ${message.notification?.title}");
     final notification = message.notification;
     if (notification != null) {
       await _local.show(
-        0,
+        notification.hashCode,
         notification.title,
         notification.body,
         const NotificationDetails(
           android: AndroidNotificationDetails(
-            'mac1_default', 'General',
+            'mac1_default',
+            'General',
             importance: Importance.high,
             priority: Priority.high,
           ),
@@ -103,19 +92,6 @@ Future<void> _initFcm() async {
       );
     }
   });
-
-  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
-    debugPrint("FCM TOKEN REFRESHED => $newToken");
-  });
-}
-
-Future<void> _registerTokenWithBackend(int userId, String token) async {
-  final url = Uri.parse("$BASE_URL/auth/update_token");
-  await http.post(
-    url,
-    headers: {"Content-Type": "application/json"},
-    body: jsonEncode({"user_id": userId, "fcm_token": token}),
-  );
 }
 
 class MyApp extends StatelessWidget {
@@ -125,129 +101,278 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: "MAC1",
-      initialRoute: "/",
+      navigatorKey: navigatorKey,
+      title: 'MAC1',
+      theme: ThemeData(
+        primaryColor: const Color(0xFFFF4D00),
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.fromSwatch().copyWith(
+          primary: const Color(0xFFFF4D00),
+          secondary: const Color(0xFF1A1A1A),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFFF4D00),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+        ),
+      ),
+      initialRoute: '/',
       onGenerateRoute: (settings) {
+        final args = settings.arguments;
+
+        // Route guard: every screen except the entry gate and signup requires
+        // an authenticated session. Blocks stale deep-links / FCM taps from
+        // opening a protected screen after the token is gone.
+        const openRoutes = {'/', '/signup'};
+        if (!openRoutes.contains(settings.name) &&
+            !AuthManager.instance.isLoggedIn) {
+          return MaterialPageRoute(builder: (_) => const AuthGate());
+        }
+
         switch (settings.name) {
           case '/':
-            return MaterialPageRoute(builder: (_) => Loginpage());
+            return MaterialPageRoute(builder: (_) => const AuthGate());
 
           case '/signup':
-            return MaterialPageRoute(builder: (_) => Signuppage());
+            return MaterialPageRoute(builder: (_) => const Signuppage());
 
           case '/customerHome':
-            final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => Customerhp(userId: userId));
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => Customerhp(userId: args));
+            }
+            return _errorRoute("Invalid args for /customerHome");
 
           case '/workerHome':
-            final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => Workershp(userId: userId));
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => Workershp(userId: args));
+            }
+            return _errorRoute("Invalid args for /workerHome");
 
-          case '/workerInfo':
-            final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => WorkerInfoPage(userId: userId,));
-
-          case '/incomingRequests':
-            final workerId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => IncomingRequestsPage(workerId: workerId));
-
-          case '/pendingJobs':
-            final workerId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => PendingJobsPage(userId: workerId));
-
-          case '/service_workers':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(
-              builder: (_) => ServiceWorkersPage(
-                skill:        args['skill'],
-                customerLat:  args['customerLat'],
-                customerLon:  args['customerLon'],
-                customerId:   args['customerId'],
-                customerAddress: args['customerAddress'],
-              ),
-            );
-
-          case '/book':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(
-              builder: (_) => BookingPage(
-                customerId : args['customerId']  as int,
-                workerId   : args['workerId']    as int,
-                workerName : args['workerName']  as String,
-                skill      : args['skill']       as String,
-                hourlyRate : (args['hourlyRate'] as num).toDouble(),
-                rating     : (args['rating']     as num).toDouble(),
-                customerLat: (args['customerLat'] as num).toDouble(),
-                customerLon: (args['customerLon'] as num).toDouble(),
-                date: args['date'],
-                time: args['time']
-              ),
-            );
-
-          case '/wallet':
-            final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => WalletPage(workerId: userId));
-
-          case '/acceptedWorkerList':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(builder: (_) => AcceptedWorkersFull(userId: args['customer_id'],customerLat: args['customer_lat'] , customerLon: args['customer_lon']),);
-
-          case '/completedJobs':
-            final args = settings.arguments as Map<String,dynamic>;
-            return MaterialPageRoute(builder: (_) => CompletedJobPage(booking_id: args['booking_id'], userId:  args['userId']));
-
-          case '/completedJobList':
-            final userId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => Customercompletedjobs(userId: userId));
-
-          case '/payslip':
-            final bookingId = settings.arguments as int;
-            return MaterialPageRoute(builder: (_) => Finalpayslip(booking_id: bookingId));
-
-          case '/rate':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(
-              builder: (_) => RateWorkerPage(
-                customerId: args['customer_id'] as int,
-                workerId: args['worker_id'] as int,
-              ),
-            );
-
-          case '/chatbot':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(builder: (_) => ChatScreen(
-              userId: args['userId'] as int?,
-              userLat: args['customerLat'] as double?,
-              userLon: args['customerLon'] as double?,
-              userAddress: args['customerAddress'] as String?,
-            ));
+          case '/settings':
+            return MaterialPageRoute(builder: (_) => const SettingsPage());
 
           case '/adminDashboard':
-            return MaterialPageRoute(builder: (_) => AdminDashboard());
+            return MaterialPageRoute(builder: (_) => const AdminDashboard());
+
+          case '/upcomingJobs':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => CustomerUpcomingBookingsPage(userId: args));
+            }
+            return _errorRoute("Invalid args for /upcomingJobs");
+
+          case '/workerCompletedJobList':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => WorkerCompletedBookingsPage(userId: args));
+            }
+            return _errorRoute("Invalid args for /workerCompletedJobList");
+
+          case '/workerInfo':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => WorkerInfoPage(userId: args));
+            }
+            return _errorRoute("Invalid args for /workerInfo");
+
+          case '/incomingRequests':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => IncomingRequestsPage(workerId: args));
+            }
+            return _errorRoute("Invalid args for /incomingRequests");
+
+          case '/wallet':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => WalletPage(workerId: args));
+            }
+            return _errorRoute("Invalid args for /wallet");
+
+          case '/service_workers':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => ServiceWorkersPage(
+                  skill: args['skill'] ?? '',
+                  customerLat: (args['customerLat'] as num).toDouble(),
+                  customerLon: (args['customerLon'] as num).toDouble(),
+                  customerId: args['customerId'] ?? 0,
+                  customerAddress: args['customerAddress'] ?? '',
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /service_workers");
+
+          case '/chatbot':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => ChatScreen(
+                  userId: args['userId'],
+                  userLat: (args['customerLat'] as num?)?.toDouble(),
+                  userLon: (args['customerLon'] as num?)?.toDouble(),
+                  userAddress: args['customerAddress'],
+                ),
+              );
+            }
+            return MaterialPageRoute(builder: (_) => const ChatScreen());
+
+          case '/chats':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => ChatsListPage(userId: args));
+            }
+            return _errorRoute("Invalid args for /chats");
+
+          case '/chat':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => ChatThreadPage(
+                  bookingId: (args['bookingId'] as num).toInt(),
+                  otherName: args['otherName'] ?? 'Chat',
+                  chatOpen: args['chatOpen'] ?? true,
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /chat");
+
+          case '/pendingJobs':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => PendingJobsPage(userId: args));
+            }
+            return _errorRoute("Invalid args for /pendingJobs");
 
           case '/job-request':
-            final args = settings.arguments as Map<String, dynamic>;
-            return MaterialPageRoute(builder: (_) => JobRequestPage(
-              customerId: args['customerId'] as int,
-              workerId: args['workerId'] as int,
-              workerName: args['workerName'] as String,
-              workerSkill: args['workerSkill'] as String,
-              hourlyRate: (args['hourlyRate'] as num).toDouble(),
-              distance: (args['distance'] as num).toDouble(),
-              customerLat: (args['customerLat'] as num).toDouble(),
-              customerLon: (args['customerLon'] as num).toDouble(),
-              customerAddress: args['customerAddress'] as String,
-              problem: args['problem']! as String,
-            ));
-            
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => JobRequestPage(
+                  customerId: args['customerId'] ?? 0,
+                  workerId: args['workerId'] ?? 0,
+                  workerName: args['workerName'] ?? '',
+                  workerSkill: args['workerSkill'] ?? '',
+                  hourlyRate: (args['hourlyRate'] as num).toDouble(),
+                  distance: (args['distance'] as num).toDouble(),
+                  customerLat: (args['customerLat'] as num).toDouble(),
+                  customerLon: (args['customerLon'] as num).toDouble(),
+                  customerAddress: args['customerAddress'] ?? '',
+                  problem: args['problem'] ?? '',
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /job-request");
+
+          case '/book':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => BookingPage(
+                  customerId: args['customerId'] ?? 0,
+                  workerId: args['workerId'] ?? 0,
+                  workerName: args['workerName'] ?? '',
+                  skill: args['skill'] ?? '',
+                  hourlyRate: (args['hourlyRate'] as num).toDouble(),
+                  rating: (args['rating'] as num).toDouble(),
+                  customerLat: (args['customerLat'] as num).toDouble(),
+                  customerLon: (args['customerLon'] as num).toDouble(),
+                  customerAddress: args['customerAddress'] as String?,
+                  date: args['date'] ?? '',
+                  time: args['time'] ?? '',
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /book");
+
+          case '/completedJobs':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => CompletedJobPage(
+                  booking_id: args['booking_id'] ?? 0,
+                  userId: args['userId'] ?? 0,
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /completedJobs");
+
+          case '/customerCompletedJobs':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => Customercompletedjobs(userId: args));
+            }
+            return _errorRoute("Invalid args for /customerCompletedJobs");
+
+          case '/payslip':
+            if (args is int) {
+              return MaterialPageRoute(builder: (_) => Finalpayslip(booking_id: args));
+            }
+            return _errorRoute("Invalid args for /payslip");
+
+          case '/rate':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => RateWorkerPage(
+                  customerId: args['customer_id'] ?? 0,
+                  workerId: args['worker_id'] ?? 0,
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /rate");
+
+          case '/acceptedWorkers':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => AcceptedWorkersFull(
+                  userId: args['userId'] ?? 0,
+                  customerLat: (args['customerLat'] as num?)?.toDouble() ?? 0.0,
+                  customerLon: (args['customerLon'] as num?)?.toDouble() ?? 0.0,
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /acceptedWorkers");
+
           default:
-            return MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: Center(child: Text("No route defined for ${settings.name}")),
-              ),
-            );
+            return _errorRoute("Route not found: ${settings.name}");
         }
       },
+      routes: const {}, // We are using onGenerateRoute, so this can be empty
     );
+  }
+
+  MaterialPageRoute _errorRoute(String message) {
+    return MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text("Error")),
+        body: Center(child: Text(message)),
+      ),
+    );
+  }
+}
+
+/// Decides the first screen based on the restored session: login when logged
+/// out, otherwise the role-appropriate home. Used for '/' and as the fallback
+/// when the route guard rejects a protected route.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = AuthManager.instance;
+    if (!auth.isLoggedIn) return const Loginpage();
+
+    switch (auth.role) {
+      case 'customer':
+        return Customerhp(userId: auth.userId!);
+      case 'worker':
+        return Workershp(userId: auth.userId!);
+      case 'admin':
+        return const AdminDashboard();
+      default:
+        return const Loginpage();
+    }
   }
 }

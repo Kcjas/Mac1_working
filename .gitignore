@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+backend/.venv/
+.venv/
+
+# Environment / secrets
+.env
+backend/firebase_admin.json
+
+# Local databases
+*.db
+
+# Flutter / Dart
+frontend/mac1_app/.dart_tool/
+frontend/mac1_app/build/
+frontend/mac1_app/.flutter-plugins
+frontend/mac1_app/.flutter-plugins-dependencies
+
+# Misc
+*.log

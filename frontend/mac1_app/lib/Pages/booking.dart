@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
 
@@ -12,6 +13,7 @@ class BookingPage extends StatefulWidget {
   final double rating;
   final double customerLat;
   final double customerLon;
+  final String? customerAddress;
   final String date;
   final String time;
 
@@ -25,6 +27,7 @@ class BookingPage extends StatefulWidget {
     required this.rating,
     required this.customerLat,
     required this.customerLon,
+    this.customerAddress,
     required this.date,
     required this.time,
   });
@@ -41,14 +44,21 @@ class _BookingPageState extends State<BookingPage> {
   @override
   void initState() {
     super.initState();
-    fetchAddressFromCoords();
+    // Prefer the address the customer chose on the job request page; only
+    // reverse-geocode the coordinates when none was carried through.
+    final chosen = widget.customerAddress;
+    if (chosen != null && chosen.trim().isNotEmpty) {
+      customerAddress = chosen;
+    } else {
+      fetchAddressFromCoords();
+    }
   }
 
   Future<void> fetchAddressFromCoords() async {
     final url = Uri.parse("https://nominatim.openstreetmap.org/reverse?format=json&lat=${widget.customerLat}&lon=${widget.customerLon}");
 
     try {
-      final response = await http.get(url);
+      final response = await AuthHttp.get(url);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
@@ -120,10 +130,13 @@ class _BookingPageState extends State<BookingPage> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text("Confirm Booking"),
+        title: const Text(
+          "Confirm Booking",
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: Colors.black87,
+        foregroundColor: Colors.black,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -132,7 +145,7 @@ class _BookingPageState extends State<BookingPage> {
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.grey.shade200),
             ),
             child: Padding(
@@ -142,12 +155,12 @@ class _BookingPageState extends State<BookingPage> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(10),
+                      color: const Color(0xFFFF4D00).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.person,
-                      color: Colors.blue.shade600,
+                      color: Color(0xFFFF4D00),
                       size: 24,
                     ),
                   ),
@@ -227,18 +240,20 @@ class _BookingPageState extends State<BookingPage> {
                       labelText: "Job Title",
                       hintText: "e.g., Fix kitchen sink",
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(20),
                         borderSide: BorderSide(color: Colors.grey.shade300),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(20),
                         borderSide: BorderSide(color: Colors.grey.shade300),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Colors.black87, width: 2),
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: const BorderSide(color: Color(0xFFFF4D00), width: 2),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                     ),
                   ),
                 ],
@@ -252,7 +267,7 @@ class _BookingPageState extends State<BookingPage> {
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.grey.shade200),
             ),
             child: Padding(
@@ -294,7 +309,7 @@ class _BookingPageState extends State<BookingPage> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.location_on, size: 16, color: Colors.blue.shade600),
+                      const Icon(Icons.location_on, size: 16, color: Color(0xFFFF4D00)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -315,7 +330,7 @@ class _BookingPageState extends State<BookingPage> {
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.grey.shade200),
             ),
             child: Padding(
@@ -396,14 +411,14 @@ class _BookingPageState extends State<BookingPage> {
             child: ElevatedButton(
               onPressed: _isSubmitting ? null : _submitBooking,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black87,
+                backgroundColor: const Color(0xFFFF4D00),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 20),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(24),
                 ),
                 elevation: 0,
-                disabledBackgroundColor: Colors.grey.shade400,
+                disabledBackgroundColor: Colors.grey.shade300,
               ),
               child: _isSubmitting
                   ? const SizedBox(

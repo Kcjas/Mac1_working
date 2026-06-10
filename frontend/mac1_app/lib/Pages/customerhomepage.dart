@@ -4,10 +4,10 @@ import '../models/CustomerProfile.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../services/address.dart';
-import '../services/profilerow.dart';
 import '../services/customer_booking_preview.dart';
 import '../services/accepted_worker.dart';
 import '../services/customercompletedbookingpreview.dart';
+import 'widgets/chat_message_button.dart';
 
 class Customerhp extends StatefulWidget {
   final int userId;
@@ -47,8 +47,9 @@ class _CustomerhpState extends State<Customerhp> {
 
   Widget _buildServiceButton(String service, IconData icon, Color color) {
     return Material(
+      color: _currentPosition == null ? Colors.grey.shade300 : const Color(0xFFFF4D00),
       elevation: 2,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: _currentPosition == null
             ? null
@@ -61,18 +62,8 @@ class _CustomerhpState extends State<Customerhp> {
                   'customerAddress': _address ?? "Unknown",
                 });
               },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: _currentPosition == null
-                  ? [Colors.grey.shade300, Colors.grey.shade400]
-                  : [color.withOpacity(0.8), color],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-          ),
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -100,10 +91,14 @@ class _CustomerhpState extends State<Customerhp> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text("Dashboard", style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text(
+          "Dashboard",
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: Colors.black87,
+        foregroundColor: Colors.black,
+        actions: [ChatInboxIcon(userId: widget.userId)],
       ),
       body: SafeArea(
         child: FutureBuilder<Customerprofile>(
@@ -126,19 +121,8 @@ class _CustomerhpState extends State<Customerhp> {
                 children: [
                   Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.blue.shade400, Colors.blue.shade600],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.blue.shade200,
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        )
-                      ],
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(24),
                     ),
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -160,7 +144,7 @@ class _CustomerhpState extends State<Customerhp> {
                               ),
                               child: const CircleAvatar(
                                 radius: 35,
-                                backgroundColor: Colors.blue,
+                                backgroundColor: Color(0xFFFF4D00),
                                 child: Icon(Icons.person, size: 40, color: Colors.white),
                               ),
                             ),
@@ -224,19 +208,8 @@ class _CustomerhpState extends State<Customerhp> {
 
                   Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.deepPurple.shade400, Colors.deepPurple.shade600],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.deepPurple.shade200,
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        )
-                      ],
+                      color: const Color(0xFFFF4D00),
+                      borderRadius: BorderRadius.circular(24),
                     ),
                     child: Material(
                       color: Colors.transparent,
@@ -297,10 +270,10 @@ class _CustomerhpState extends State<Customerhp> {
                     crossAxisSpacing: 16,
                     childAspectRatio: 1.1,
                     children: [
-                      _buildServiceButton("Plumbing", Icons.plumbing, Colors.orange.shade600),
-                      _buildServiceButton("Cleaning", Icons.cleaning_services, Colors.teal.shade600),
-                      _buildServiceButton("HVAC", Icons.ac_unit, Colors.indigo.shade600),
-                      _buildServiceButton("Electrician", Icons.electrical_services, Colors.amber.shade700),
+                      _buildServiceButton("Plumber", Icons.plumbing, const Color(0xFFFF4D00)),
+                      _buildServiceButton("Cleaning", Icons.cleaning_services, const Color(0xFFFF4D00)),
+                      _buildServiceButton("HVAC", Icons.ac_unit, const Color(0xFFFF4D00)),
+                      _buildServiceButton("Electrician", Icons.electrical_services, const Color(0xFFFF4D00)),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -362,14 +335,8 @@ class _CustomerhpState extends State<Customerhp> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

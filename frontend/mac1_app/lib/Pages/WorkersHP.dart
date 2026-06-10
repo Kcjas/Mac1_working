@@ -4,6 +4,7 @@ import '../models/WorkerProfile.dart';
 import '../services/api_service.dart';
 import '../services/Booking_preview.dart';
 import '../services/profilerow.dart';
+import 'widgets/chat_message_button.dart';
 
 class Workershp extends StatefulWidget {
   final int userId;
@@ -17,17 +18,13 @@ class _WorkershpState extends State<Workershp> {
   late Future<Workerprofile> workerFuture;
   late Future<double> ratingFuture;
 
-  // 🚫 NOT late → prevents LateInitializationError
   Future<List<dynamic>> leaderboardFuture = Future.value([]);
 
   @override
   void initState() {
     super.initState();
-
     workerFuture = ApiService.fetchWorkerdata(widget.userId);
     ratingFuture = ApiService.fetchWorkerRating(widget.userId);
-
-    // ✅ always initialized
     leaderboardFuture = ApiService.fetchLeaderboard();
   }
 
@@ -38,6 +35,7 @@ class _WorkershpState extends State<Workershp> {
         title: const Text("Workers Dashboard"),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+        actions: [ChatInboxIcon(userId: widget.userId)],
       ),
       backgroundColor: Colors.grey[50],
       body: FutureBuilder<Workerprofile>(
@@ -59,7 +57,6 @@ class _WorkershpState extends State<Workershp> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // PROFILE CARD
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -109,8 +106,6 @@ class _WorkershpState extends State<Workershp> {
                 ),
 
                 const SizedBox(height: 16),
-
-                // ACTION BUTTONS
                 Row(
                   children: [
                     Expanded(
@@ -165,14 +160,10 @@ class _WorkershpState extends State<Workershp> {
                 ),
 
                 const SizedBox(height: 20),
-
-                // BOOKINGS
                 BookingPreview(userId: widget.userId, type: 'pending'),
                 BookingPreview(userId: widget.userId, type: 'completed'),
 
                 const SizedBox(height: 30),
-
-                // RATING
                 FutureBuilder<double>(
                   future: ratingFuture,
                   builder: (context, snapshot) {
@@ -202,8 +193,6 @@ class _WorkershpState extends State<Workershp> {
                 ),
 
                 const SizedBox(height: 30),
-
-                // 🔥 LEADERBOARD (FIXED, SAFE)
                 FutureBuilder<List<dynamic>>(
                   future: leaderboardFuture,
                   builder: (context, snapshot) {
@@ -269,13 +258,12 @@ class _WorkershpState extends State<Workershp> {
                                 ),
                               ),
                             );
-                          }).toList(),
+                          }),
                         ],
                       ),
                     );
                   },
                 ),
-
                 const SizedBox(height: 20),
               ],
             ),

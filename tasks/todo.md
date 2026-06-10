@@ -1,0 +1,60 @@
+# Project Tasks
+
+- [ ] Audit Fixes (found 2026-06-08 — gaps beyond CLAUDE.md known issues)
+    - HIGH — Authorization is role-only, not identity (IDOR). Guards check role but never compare the token user to the IDs in the request.
+        - [ ] `jobs.py` `complete_booking`: inject user, 403 unless caller == `booking.worker_id`
+        - [ ] `jobs.py` `respond_to_job`: inject user, 403 unless caller owns the job
+        - [ ] `jobs.py` `request_job` / `create_booking`: derive `customer_id` from token, not request body
+        - [ ] `workers.py` (`worker_info`, `rate`, `pending-jobs`, `completed-jobs`, `incoming-requests`, `wallet`): verify token user matches path/body worker_id
+        - [ ] `customers.py` (`upcoming-jobs`, accepted-workers, profile): verify token user matches path user_id
+    - HIGH — `/auth/update_token` is unauthenticated (anyone can overwrite any user's FCM token)
+        - [ ] Require auth, set token on `user.id`; switch client callers (`notification.dart`, `Loginpage.dart`) to AuthHttp
+    - HIGH — Flutter: state used across `await` without `mounted` guard (crash on navigate-away)
+        - [ ] Add `if (!mounted) return;` in `booking.dart`, `Rating.dart`, `Completed_jobs_page.dart`, `incoming_request.dart`, `finalPaySlip.dart`
+    - MED — Error/info hygiene
+        - [ ] Replace `detail=str(e)` with generic message + server log (`jobs.py:70,167,220`); stop printing raw `response.body` in client SnackBars
+        - [ ] Use plain `http.get` (not AuthHttp) for external Nominatim call in `booking.dart` (don't leak JWT to third party)
+        - [ ] Replace raw `dict` bodies in `worker_info`/`rate` with Pydantic models + bounds (non-neg rate, valid lat/long, review length); drop unused `RatingData`
+        - [ ] Add unique `(customer_id, worker_id)` constraint on ratings (prevent inflation)
+    - LOW — Cleanup
+        - [ ] Remove exception `print()`s; null-safe route-arg casts in `main.dart`; stronger signup email check; length/enum constraints on `models.py` string columns
+
+- [/] Backend Security Hardening
+    - [x] Hash passwords with bcrypt (commit 44913e8)
+    - [x] JWT authentication
+        - [x] Issue a signed JWT on `/auth/login` (and `/auth/signup`); added `GET /auth/me`
+        - [x] `get_current_user` dependency to validate tokens (HS256, explicit algorithms allow-list)
+        - [x] Protect endpoints with auth + role checks (admin-only `/admin/*`, plus worker/customer guards; role read from DB, not the token claim)
+        - [x] Flutter: store JWT in flutter_secure_storage, send `Authorization: Bearer` via AuthHttp; AuthManager global state, 401 -> nav reset, route guards
+    - [x] Rate limiting (slowapi)
+        - [x] Throttle `/auth/login` (5/min) and `/auth/signup` (3/min) against brute-force/enumeration
+- [ ] Flutter Driver User Journey Test
+- [/] Complete App Redesign (Architect Workflow)
+
+    - [ ] Phase 1: Global Theme & Base
+        - [ ] `main.dart` (White background, Orange #FF4D00 & Black #1A1A1A palette, no shadows)
+        - [ ] Setup reusable components (Pill tags, Circular Indicators, Wave Graph placeholders)
+    - [ ] Phase 2: Authentication
+        - [ ] `Loginpage.dart`
+        - [ ] `Signuppage.dart`
+    - [ ] Phase 3: Customer Flow
+        - [ ] `customerhomepage.dart` (Dark cards, bold numbers, remove illustrations)
+        - [ ] `CustomerUpcomingBookingsPage.dart`
+        - [ ] `customercompletedjobs.dart`
+        - [ ] `booking.dart`
+        - [ ] `Rating.dart`
+        - [ ] `accepted_workers_full.dart`
+    - [ ] Phase 4: Worker Flow
+        - [ ] `WorkersHP.dart`
+        - [ ] `WorkerInfoPage.dart`
+        - [ ] `WorkerCompletedBookingsPage.dart`
+        - [ ] `pendingJobs.dart`
+        - [ ] `incoming_request.dart`
+    - [ ] Phase 5: Admin & Misc
+        - [ ] `admin_dashboard.dart` (Implement wave graphs for metrics)
+        - [ ] `chatbot.dart`
+        - [ ] `wallet.dart`
+        - [ ] `settings_page.dart`
+        - [ ] `finalPaySlip.dart`
+        - [ ] `jobrequest.dart`
+        - [ ] `service_workers.dart`

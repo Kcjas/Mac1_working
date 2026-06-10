@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class Finalpayslip extends StatefulWidget {
   final int booking_id;
@@ -24,9 +26,10 @@ class _finalPaySlipState extends State<Finalpayslip> {
   }
 
   Future<void> fetchPayslip() async {
-    final url = Uri.parse("http://192.168.1.12:8000/booking/${widget.booking_id}/summary");
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final url = Uri.parse("$baseUrl/booking/${widget.booking_id}/summary");
 
-    final response = await http.get(url);
+    final response = await AuthHttp.get(url);
     if (response.statusCode == 200) {
       setState(() {
         payslip = json.decode(response.body);

@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.mac1_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.mac1_app"
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

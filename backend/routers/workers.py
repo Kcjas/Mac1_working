@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import func
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import func, desc
 from datetime import datetime
 from pydantic import BaseModel
 
 from ..database import SessionLocal
-from ..models import User, Worker, Booking, Rating, JobRequest
+from ..models import User, Worker, Booking, Rating, JobRequest, Message
 from ..utils import calc_distance
 from ..notifications import send_to_token
+from ..auth_deps import get_current_user, require_worker, require_customer
+from .chat import unread_counts as _unread_counts
 
 
 router = APIRouter(tags=["Workers"]) 
@@ -27,7 +29,7 @@ class RatingData:
     review: str = ""
 
 
-@router.post("/worker_info")
+@router.post("/worker_info", dependencies=[Depends(require_worker)])
 def add_worker_info(data: dict):
     db = SessionLocal()
 
@@ -59,7 +61,7 @@ def add_worker_info(data: dict):
     return {"message": "Worker Profile created successfully"}
 
 
-@router.get("/worker_profile/{user_id}")
+@router.get("/worker_profile/{user_id}", dependencies=[Depends(get_current_user)])
 def get_worker_profile(user_id: int):
     db = SessionLocal()
     worker = db.query(Worker).filter(Worker.user_id == user_id).first()
@@ -81,13 +83,15 @@ def get_worker_profile(user_id: int):
     }
 
 
-@router.get("/worker/{worker_id}/pending-jobs")
+@router.get("/worker/{worker_id}/pending-jobs", dependencies=[Depends(require_worker)])
 def get_pending_jobs(worker_id: int):
     db = SessionLocal()
     jobs = db.query(Booking).filter(
         Booking.worker_id == worker_id,
         Booking.status == "pending"
     ).order_by(Booking.date, Booking.time).all()
+
+    unread = _unread_counts(db, [j.id for j in jobs], viewer_id=worker_id)
 
     result = []
     for job in jobs:
@@ -98,14 +102,15 @@ def get_pending_jobs(worker_id: int):
             "date": job.date.strftime("%Y-%m-%d"),
             "time": job.time.strftime("%H:%M"),
             "customer_name": customer.name if customer else "Unknown",
-            "booking_id": job.id
+            "booking_id": job.id,
+            "unread_count": unread.get(job.id, 0),
         })
 
     db.close()
     return result
 
 
-@router.get("/worker/{worker_id}/completed-jobs")
+@router.get("/worker/{worker_id}/completed-jobs", dependencies=[Depends(require_worker)])
 def get_completed_jobs(worker_id: int):
     db = SessionLocal()
     jobs = db.query(Booking).filter(
@@ -123,7 +128,7 @@ def get_completed_jobs(worker_id: int):
     } for job in jobs]
 
 
-@router.post("/rate")
+@router.post("/rate", dependencies=[Depends(require_customer)])
 def rate_worker(data: dict):
     db = SessionLocal()
     try:
@@ -155,7 +160,7 @@ def rate_worker(data: dict):
     finally:
         db.close()
 
-@router.get("/worker_rating/{worker_id}")
+@router.get("/worker_rating/{worker_id}", dependencies=[Depends(get_current_user)])
 def get_worker_rating(worker_id: int):
     db = SessionLocal()
     avg_rating = (
@@ -167,7 +172,7 @@ def get_worker_rating(worker_id: int):
     return {"average_rating": round(avg_rating, 2)}
 
 
-@router.get("/worker/leaderboard")
+@router.get("/worker/leaderboard", dependencies=[Depends(get_current_user)])
 def get_leaderboard():
     db = SessionLocal()
     results = (
@@ -182,7 +187,7 @@ def get_leaderboard():
     return [{"name": name, "avg_rating": round(avg_rating, 2)} for name, avg_rating in results]
 
 
-@router.get("/workers/skill/{skill}")
+@router.get("/workers/skill/{skill}", dependencies=[Depends(require_customer)])
 def get_workers_by_skill(skill: str, customer_lat: float, customer_lon: float):
     db = SessionLocal()
     try:
@@ -215,7 +220,7 @@ def get_workers_by_skill(skill: str, customer_lat: float, customer_lon: float):
         db.close()
 
 
-@router.get("/worker/{worker_id}/incoming-requests")
+@router.get("/worker/{worker_id}/incoming-requests", dependencies=[Depends(require_worker)])
 def get_incoming_requests(worker_id: int):
     db = SessionLocal()
     try:
@@ -254,17 +259,17 @@ def get_incoming_requests(worker_id: int):
         db.close()
 
 
-@router.get("/worker/{worker_id}/wallet")
-def get_wallet(worker_user_id: int, limit: int = 10):
-    db: Session = SessionLocal()
+@router.get("/worker/{worker_id}/wallet", dependencies=[Depends(require_worker)])
+def get_wallet(worker_id: int, limit: int = 10):
+    db = SessionLocal()
     try:
-        worker = db.query(Worker).filter(Worker.user_id == worker_user_id).first()
+        worker = db.query(Worker).filter(Worker.user_id == worker_id).first()
         if not worker:
             return {"money_earned": 0.0, "transactions": []}
 
         bookings = (
             db.query(Booking)
-            .filter(Booking.worker_id == worker_user_id, Booking.status == "completed")
+            .filter(Booking.worker_id == worker_id, Booking.status == "completed")
             .order_by(desc(Booking.created_at))
             .limit(limit)
             .all()

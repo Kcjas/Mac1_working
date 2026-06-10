@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class CustomerCompletedBookingPreview extends StatefulWidget {
   final int userId;
@@ -20,13 +22,18 @@ class _CustomerCompletedBookingPreviewState extends State<CustomerCompletedBooki
   @override
   void initState() {
     super.initState();
-    _completedJobs = fetchCompletedJobs(widget.userId);
+    _completedJobs = _fetchJobs();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchJobs() async {
+    return fetchCompletedJobs(widget.userId);
   }
 
   Future<List<Map<String, dynamic>>> fetchCompletedJobs(int userId) async {
-    final url = Uri.parse("http://192.168.1.12:8000/customer/$userId/completed-jobs");
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final url = Uri.parse("$baseUrl/customer/$userId/completed-jobs");
 
-    final response = await http.get(url);
+    final response = await AuthHttp.get(url);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.cast<Map<String, dynamic>>();
@@ -116,7 +123,7 @@ class _CustomerCompletedBookingPreviewState extends State<CustomerCompletedBooki
               onTap: () {
                 Navigator.pushNamed(
                   context,
-                  '/completedJobList',
+                  '/customerCompletedJobs',
                   arguments: widget.userId,
                 );
               },
@@ -240,7 +247,7 @@ class _CustomerCompletedBookingPreviewState extends State<CustomerCompletedBooki
                       );
                     },
                     icon: const Icon(Icons.receipt_long, size: 18),
-                    label: const Text("Payslip"),
+                    label: const Text("Invoice"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green.shade600,
                       foregroundColor: Colors.white,

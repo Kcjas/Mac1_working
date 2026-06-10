@@ -1,4 +1,3 @@
-# backend/routers/customer.py
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import func
 from datetime import datetime
@@ -6,6 +5,7 @@ from datetime import datetime
 from ..database import SessionLocal
 from ..models import User, Worker, Booking, Rating, JobRequest
 from ..utils import calc_distance
+from .chat import unread_counts as _unread_counts
 
 router = APIRouter(prefix="/customer", tags=["Customer"])
 
@@ -29,18 +29,30 @@ def get_customer_profile(user_id: int):
 @router.get("/{user_id}/upcoming-jobs")
 def get_upcoming_jobs(user_id: int):
     db = SessionLocal()
-    jobs = db.query(Booking).filter(
-        Booking.customer_id == user_id,
-        Booking.status == "pending"
-    ).order_by(Booking.date, Booking.time).all()
-    db.close()
+    try:
+        jobs = db.query(Booking).filter(
+            Booking.customer_id == user_id,
+            Booking.status == "pending"
+        ).order_by(Booking.date, Booking.time).all()
 
-    return [{
-        "job-title": job.job_title,
-        "address": job.address,
-        "date": job.date.strftime("%Y-%m-%d"),
-        "time": job.time.strftime("%H:%M"),
-    } for job in jobs]
+        unread = _unread_counts(db, [j.id for j in jobs], viewer_id=user_id)
+
+        result = []
+        for job in jobs:
+            worker = db.query(User).filter(User.id == job.worker_id).first()
+            result.append({
+                "booking_id": job.id,
+                "worker_id": job.worker_id,
+                "worker_name": worker.name if worker else "Worker",
+                "job-title": job.job_title,
+                "address": job.address,
+                "date": job.date.strftime("%Y-%m-%d"),
+                "time": job.time.strftime("%H:%M"),
+                "unread_count": unread.get(job.id, 0),
+            })
+        return result
+    finally:
+        db.close()
 
 
 @router.get("/{user_id}/accepted-workers")
@@ -81,6 +93,7 @@ def get_accepted_workers(user_id: int):
                 "distance": round(distance, 2),
                 "customer_lat": offer.customer_lat,
                 "customer_lon": offer.customer_lon,
+                "customer_address": offer.customer_address,
                 "date": offer.preferred_datetime.date().isoformat(),
                 "time": offer.preferred_datetime.time().strftime("%H:%M")
             })

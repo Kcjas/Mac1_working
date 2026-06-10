@@ -225,6 +225,97 @@ def get_revenue():
             rate = db.query(Worker.hourly_rate).filter(Worker.user_id == b.worker_id).scalar() or 0.0
             hours = b.time_taken or 0.0
             total_commission += rate * hours * 0.10
-        return {"total_commission_earned": round(total_commission, 2)}
+        return {"total_revenue": round(total_commission, 2)}
+    finally:
+        db.close()
+
+@router.get("/stats")
+def get_stats():
+    db = SessionLocal()
+    try:
+        pending_count = db.query(func.count(Booking.id)).filter(Booking.status == "pending").scalar()
+        completed_count = db.query(func.count(Booking.id)).filter(Booking.status == "completed").scalar()
+
+        popularity = (
+            db.query(Worker.skill, func.count(Booking.id))
+            .select_from(Booking)
+            .join(Worker, Booking.worker_id == Worker.user_id)
+            .group_by(Worker.skill)
+            .all()
+        )
+        popularity_data = {skill: count for skill, count in popularity}
+
+
+        worker_dist = (
+            db.query(Worker.skill, func.count(Worker.id))
+            .group_by(Worker.skill)
+            .all()
+        )
+        worker_dist_data = {skill: count for skill, count in worker_dist}
+
+        monthly_users = [
+            {"month": "Jan", "count": 10},
+            {"month": "Feb", "count": 15},
+            {"month": "Mar", "count": 12},
+            {"month": "Apr", "count": 20},
+            {"month": "May", "count": 25},
+            {"month": "Jun", "count": 35},
+        ]
+
+        return {
+            "pending_count": pending_count,
+            "completed_count": completed_count,
+            "job_popularity": popularity_data,
+            "worker_distribution": worker_dist_data,
+            "monthly_users": monthly_users,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/warn/{worker_id}")
+def warn_worker(worker_id: int):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == worker_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        
+        # Send Notification (Mock or Real)
+        if user.fcm_token:
+            from ..notifications import send_to_token
+            send_to_token(
+                user.fcm_token,
+                "Performance Warning",
+                "Your average rating has dropped. Please improve your service quality to avoid penalties.",
+                data={"route": "/workerHome"}
+            )
+        
+        return {"message": "Warning sent successfully"}
+    except Exception as e:
+        print(f"Warning failed: {e}")
+        return {"message": "Warning simulated (or failed to send)"}
+    finally:
+        db.close()
+
+
+@router.post("/booking/{booking_id}/reopen-chat")
+def reopen_chat(booking_id: int):
+    """Re-enable messaging on a booking whose chat auto-closed (7 days after
+    completion). Sets the override flag so _chat_open() returns True again."""
+    db = SessionLocal()
+    try:
+        booking = db.query(Booking).filter(Booking.id == booking_id).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking.chat_force_open = True
+        db.commit()
+        return {"message": "Chat reopened", "booking_id": booking_id}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()

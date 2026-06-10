@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class CustomerBookingPreview extends StatefulWidget {
   final int userId;
@@ -20,13 +22,18 @@ class _CustomerBookingPreviewState extends State<CustomerBookingPreview> {
   @override
   void initState() {
     super.initState();
-    _upcomingJobs = fetchUpcomingJobs(widget.userId);
+    _upcomingJobs = _fetchJobs();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchJobs() async {
+    return fetchUpcomingJobs(widget.userId);
   }
 
   Future<List<Map<String, dynamic>>> fetchUpcomingJobs(int userId) async {
-    final url = Uri.parse("http://192.168.1.12:8000/customer/${widget.userId}/upcoming-jobs");
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final url = Uri.parse("$baseUrl/customer/${widget.userId}/upcoming-jobs");
 
-    final response = await http.get(url);
+    final response = await AuthHttp.get(url);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.cast<Map<String, dynamic>>();

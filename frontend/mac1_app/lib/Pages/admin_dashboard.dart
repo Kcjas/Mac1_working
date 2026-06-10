@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
+import 'package:fl_chart/fl_chart.dart'; 
 import '../services/api_service.dart';
+import '../config/api_config.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -20,33 +23,59 @@ class _AdminDashboardState extends State<AdminDashboard> {
         "Accept": "application/json",
         "Content-Type": "application/json",
       };
+  
+  final Map<String, Color> _jobColors = {
+    "plumber": Colors.blue,
+    "electrician": Colors.amber,
+    "cleaning": Colors.green,
+    "hvac": Colors.redAccent,
+    "carpenter": Colors.brown,
+    "other": Colors.grey,
+  };
 
-  Uri _uri(String path, [Map<String, String?> q = const {}]) {
+  Color _getColorForSkill(String skill) {
+    String lower = skill.toLowerCase();
+    if (lower.contains("plumb")) return _jobColors["plumber"]!;
+    if (lower.contains("elect")) return _jobColors["electrician"]!;
+    if (lower.contains("clean")) return _jobColors["cleaning"]!;
+    if (lower.contains("hvac")) return _jobColors["hvac"]!;
+    if (lower.contains("carpet") || lower.contains("clean")) return _jobColors["cleaning"]!; 
+    return _jobColors["other"]!;
+  }
+
+  Future<Uri> _buildUri(String path, [Map<String, String?> q = const {}]) async {
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final cleanPath = path.startsWith("/") ? path : "/$path";
+    var uri = Uri.parse("$baseUrl$cleanPath");
+    
     final qp = <String, String>{};
     q.forEach((k, v) {
       if (v != null && v.trim().isNotEmpty) qp[k] = v.trim();
     });
-    return Uri(
-      host: BASE_URL,
-      path: path.startsWith("/") ? path : "/$path",
-      queryParameters: qp.isEmpty ? null : qp,
-    );
+    
+    if (qp.isNotEmpty) {
+      uri = uri.replace(queryParameters: qp);
+    }
+    return uri;
   }
 
   Future<http.Response> _get(String path, {Map<String, String?> q = const {}}) async {
-    final res = await http.get(_uri(path, q), headers: _headers);
+    final uri = await _buildUri(path, q);
+    final res = await AuthHttp.get(uri, headers: _headers);
     if (res.statusCode >= 200 && res.statusCode < 300) return res;
     throw Exception("GET $path failed (${res.statusCode}): ${res.body}");
   }
 
   Future<http.Response> _patch(String path, Map<String, dynamic> body) async {
-    final res = await http.patch(_uri(path), headers: _headers, body: json.encode(body));
+    final uri = await _buildUri(path);
+    final res = await AuthHttp.patch(uri, headers: _headers, body: json.encode(body));
     if (res.statusCode >= 200 && res.statusCode < 300) return res;
     throw Exception("PATCH $path failed (${res.statusCode}): ${res.body}");
   }
 
   Future<http.Response> _delete(String path) async {
-    final res = await http.delete(_uri(path), headers: _headers);
+    final uri = await _buildUri(path);
+    final res = await AuthHttp.delete(uri, headers: _headers);
     if (res.statusCode >= 200 && res.statusCode < 300) return res;
     throw Exception("DELETE $path failed (${res.statusCode}): ${res.body}");
   }
@@ -77,9 +106,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ================= STATE =================
   double revenue = 0;
-  bool loadingRevenue = false;
+  int pendingCount = 0;
+  int completedCount = 0;
+  Map<String, dynamic> jobPopularity = {};
+  Map<String, dynamic> workerDistribution = {};
+  List<dynamic> monthlyUsers = [];
+  bool loadingStats = false;
 
   final userSearch = TextEditingController();
   String? roleFilter;
@@ -120,27 +153,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
     super.dispose();
   }
 
-  // ================= FETCHERS =================
   Future<void> _refreshAll() async {
     await Future.wait([
-      _fetchRevenue(),
+      _fetchStats(),
       _fetchUsers(page: 1),
       _fetchWorkers(page: 1),
       _fetchBookings(page: 1),
     ]);
   }
 
-  Future<void> _fetchRevenue() async {
-    setState(() => loadingRevenue = true);
+  Future<void> _fetchStats() async {
+    setState(() => loadingStats = true);
     try {
-      final res = await _get("/admin/revenue");
-      final body = json.decode(res.body);
-      final total = body["total_revenue"] ?? body["total"] ?? 0;
-      setState(() => revenue = (total is num) ? total.toDouble() : 0);
+      // Fetch Revenue
+      final revRes = await _get("/admin/revenue");
+      final revBody = json.decode(revRes.body);
+      
+      // Fetch Counts & Charts
+      final statsRes = await _get("/admin/stats");
+      final statsBody = json.decode(statsRes.body);
+
+      if (mounted) {
+        setState(() {
+          revenue = (revBody["total_revenue"] ?? 0).toDouble();
+          pendingCount = statsBody["pending_count"] ?? 0;
+          completedCount = statsBody["completed_count"] ?? 0;
+          jobPopularity = statsBody["job_popularity"] ?? {};
+          workerDistribution = statsBody["worker_distribution"] ?? {};
+          monthlyUsers = statsBody["monthly_users"] ?? [];
+        });
+      }
     } catch (e) {
-      _toast("Revenue error: $e");
+      _toast("Stats error: $e");
     } finally {
-      if (mounted) setState(() => loadingRevenue = false);
+      if (mounted) setState(() => loadingStats = false);
     }
   }
 
@@ -214,7 +260,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  // ================= EDIT DIALOGS =================
+
   Future<void> _editUserDialog(Map u) async {
     final nameCtrl = TextEditingController(text: "${u['name'] ?? ''}");
     final emailCtrl = TextEditingController(text: "${u['email'] ?? ''}");
@@ -232,7 +278,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: "Email")),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: role,
+              initialValue: role,
               items: const ["customer", "worker", "admin"]
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                   .toList(),
@@ -284,6 +330,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
       } catch (e) {
         _toast("Delete failed: $e");
       }
+    }
+  }
+
+  Future<void> _warnWorker(int workerId) async {
+    try {
+      final uri = await _buildUri("/admin/warn/$workerId");
+      final res = await AuthHttp.post(uri, headers: _headers);
+      if (res.statusCode == 200) {
+        _toast("Warning sent to worker");
+      } else {
+        _toast("Failed to warn");
+      }
+    } catch (e) {
+      _toast("Error: $e");
     }
   }
 
@@ -348,8 +408,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             TextField(controller: timeCtrl, decoration: const InputDecoration(labelText: "Time (HH:MM)")),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: status,
-              items: const ["pending", "accepted", "completed", "cancelled"]
+              initialValue: status,
+              items: const ["pending", "completed"]
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                   .toList(),
               onChanged: (v) => status = v ?? status,
@@ -374,7 +434,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         });
         _toast("Booking updated");
         await _fetchBookings(page: bookingsPage);
-        await _fetchRevenue();
+        // await _fetchRevenue(); // Stat is auto refreshed in _fetchStats
       } catch (e) {
         _toast("Update failed: $e");
       }
@@ -382,6 +442,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   // ================= UI HELPERS =================
+  Widget _statCard(String title, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 8),
+            Text(value, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _pager({
     required int page,
     required bool hasNext,
@@ -425,8 +507,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              const Spacer(),
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
               ...actions,
             ]),
             const SizedBox(height: 16),
@@ -437,7 +518,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ================= BUILD =================
+  Widget _buildLegend(Map<String, dynamic> data) {
+    if (data.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: data.keys.map((key) {
+        final color = _getColorForSkill(key);
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            const SizedBox(width: 4),
+            Text(key.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black54)),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -454,21 +555,81 @@ class _AdminDashboardState extends State<AdminDashboard> {
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              const SizedBox(height: 4),
-              _section(
-                "Total Revenue",
-                loadingRevenue
-                    ? const LinearProgressIndicator()
-                    : Text("\$${revenue.toStringAsFixed(2)}", 
-                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600)),
-                actions: [
-                  IconButton(
-                    onPressed: _fetchRevenue,
-                    icon: const Icon(Icons.refresh, size: 20),
-                    visualDensity: VisualDensity.compact,
-                  )
-                ],
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    _statCard("Total Revenue", "\$${revenue.toStringAsFixed(0)}", Colors.green),
+                    const SizedBox(width: 12),
+                    _statCard("Pending Bookings", "$pendingCount", Colors.orange),
+                    const SizedBox(width: 12),
+                    _statCard("Completed Bookings", "$completedCount", Colors.blue),
+                  ],
+                ),
               ),
+              if (!loadingStats) ...[
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [_section("Job Popularity", Column(children: [
+                            AspectRatio(aspectRatio: 1.5,
+                              child: jobPopularity.isEmpty ? const Center(child: Text("No data")): PieChart(
+                                  PieChartData(sections: jobPopularity.entries.map((e) {
+                                      final color = _getColorForSkill(e.key.toString());
+                                      return PieChartSectionData(
+                                        value: (e.value as num).toDouble(),
+                                        title: "${e.value}", 
+                                        color: color,
+                                        radius: 50,
+                                        titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                      );
+                                    }).toList(),
+                                    sectionsSpace: 2,
+                                    centerSpaceRadius: 40,
+                                  ),),),
+                            const SizedBox(height: 24),
+                            _buildLegend(jobPopularity),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _section("Worker Skills", 
+                        Column(
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 1.5,
+                              child: workerDistribution.isEmpty 
+                                ? const Center(child: Text("No data"))
+                                : PieChart(
+                                  PieChartData(
+                                    sections: workerDistribution.entries.map((e) {
+                                      final color = _getColorForSkill(e.key.toString());
+                                      return PieChartSectionData(
+                                        value: (e.value as num).toDouble(),
+                                        title: "${e.value}", // Only show count
+                                        color: color,
+                                        radius: 50,
+                                        titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                                      );
+                                    }).toList(),
+                                    sectionsSpace: 2,
+                                    centerSpaceRadius: 40,
+                                  ),
+                                ),
+                            ),
+                            const SizedBox(height: 24),
+                            _buildLegend(workerDistribution),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 12),
 
               // USERS
               _section(
@@ -715,6 +876,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   ),
                                 ),
                                 const SizedBox(width: 4),
+                                if ((w['rating'] ?? 5) < 3.0)
+                                  IconButton(
+                                    tooltip: "Warn Low Rating",
+                                    icon: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+                                    onPressed: () => _warnWorker(w['id']),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
                                 IconButton(
                                   tooltip: "Edit Worker",
                                   icon: const Icon(Icons.edit_outlined, size: 18),
@@ -769,7 +937,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             value: statusFilter,
                             hint: const Text("Status", style: TextStyle(fontSize: 14)),
                             underline: const SizedBox(),
-                            items: const ["accepted", "completed"]
+                            items: const ["pending", "completed"]
                                 .map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(fontSize: 14))))
                                 .toList(),
                             onChanged: (v) {
@@ -849,73 +1017,52 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    ...bookings.map((b) {
-                      final title = b['job_title'] ?? b['title'] ?? "—";
-                      final date = b['date'] ?? "";
-                      final time = b['time'] ?? "";
-                      final status = b['status'] ?? "—";
-                      
-                      MaterialColor statusColor;
-                      switch (status.toLowerCase()) {
-                        case 'completed':
-                          statusColor = Colors.green;
-                          break;
-                        case 'accepted':
-                          statusColor = Colors.blue;
-                          break;
-                        case 'cancelled':
-                          statusColor = Colors.red;
-                          break;
-                        default:
-                          statusColor = Colors.orange;
-                      }
-                      
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.purple[50],
-                            child: Icon(Icons.event_note, color: Colors.purple[700], size: 20),
+                    ...bookings.map((b) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-                          subtitle: Text(
-                            (date.isEmpty && time.isEmpty) ? "—" : "$date $time",
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  status,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: statusColor.shade700,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.purple[50],
+                              child: Icon(Icons.calendar_today, color: Colors.purple[700], size: 20),
+                            ),
+                            title: Text(b['job_title'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w500)),
+                            subtitle: Text("${b['date']} • ${b['time']}", style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (b['status'] == "completed")
+                                        ? Colors.green[50]
+                                        : (b['status'] == "cancelled" ? Colors.red[50] : Colors.blue[50]),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    (b['status'] ?? "pending").toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: (b['status'] == "completed")
+                                          ? Colors.green[800]
+                                          : (b['status'] == "cancelled" ? Colors.red[800] : Colors.blue[800]),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              IconButton(
-                                tooltip: "Edit Booking",
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                onPressed: () => _editBookingDialog(b),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  tooltip: "Edit Booking",
+                                  icon: const Icon(Icons.edit_outlined, size: 18),
+                                  onPressed: () => _editBookingDialog(b),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }),
+                        )),
                     _pager(
                       page: bookingsPage,
                       hasNext: bookingsHasNext,
@@ -938,7 +1085,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
             ],
           ),
         ),

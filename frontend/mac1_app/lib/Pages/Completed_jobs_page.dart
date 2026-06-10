@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class CompletedJobPage extends StatefulWidget {
   final int booking_id;
@@ -26,8 +28,9 @@ class _CompletedJobPageState extends State<CompletedJobPage> {
       });
 
       try {
-        final url = Uri.parse("http://192.168.1.12:8000/booking/complete");
-        final response = await http.post(
+        final baseUrl = await ApiConfig.getBaseUrl();
+        final url = Uri.parse("$baseUrl/booking/complete");
+        final response = await AuthHttp.post(
           url,
           headers: {"Content-Type": "application/json"},
           body: jsonEncode({

@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class AcceptedWorkerPage extends StatefulWidget {
   final int customerId;
   final double customerLat;
   final double customerLon;
   const AcceptedWorkerPage({
-    Key? key,
+    super.key,
     required this.customerId,
     required this.customerLat,
     required this.customerLon,
-  }) : super(key: key);
+  });
 
   @override
   State<AcceptedWorkerPage> createState() => _AcceptedWorkerPageState();
@@ -29,8 +31,9 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
 
   Future<void> _loadWorkers() async {
     try {
-      final res = await http.get(
-        Uri.parse('http://192.168.1.12:8000/customer/${widget.customerId}/accepted-workers'),
+      final baseUrl = await ApiConfig.getBaseUrl();
+      final res = await AuthHttp.get(
+        Uri.parse('$baseUrl/customer/${widget.customerId}/accepted-workers'),
       );
       if (mounted) {
         setState(() {
@@ -189,8 +192,10 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
                                     'skill': w['skill'],
                                     'hourlyRate': w['hourly_rate'],
                                     'rating': w['rating'],
-                                    'customerLat': widget.customerLat,
-                                    'customerLon': widget.customerLon,
+                                    // Use the location the job request was made at
+                                    // (per-offer), not the customer's current GPS.
+                                    'customerLat': w['customer_lat'] ?? widget.customerLat,
+                                    'customerLon': w['customer_lon'] ?? widget.customerLon,
                                     'date': w['date'],
                                     'time': w['time'],
                                   },
@@ -221,11 +226,11 @@ class _AcceptedWorkerPageState extends State<AcceptedWorkerPage> {
           onTap: () {
             Navigator.pushNamed(
               context,
-              '/acceptedWorkerList',
+              '/acceptedWorkers',
               arguments: {
-              'customer_id': widget.customerId,
-              'customer_lat': widget.customerLat,
-              'customer_lon': widget.customerLon,
+              'userId': widget.customerId,
+              'customerLat': widget.customerLat,
+              'customerLon': widget.customerLon,
               }
             );
           },

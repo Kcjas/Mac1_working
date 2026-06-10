@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
 import '../services/address.dart';
+import '../config/api_config.dart';
 
 class IncomingRequestsPage extends StatefulWidget {
   final int workerId;
@@ -24,11 +26,10 @@ class _IncomingRequestsPageState extends State<IncomingRequestsPage> {
     _jobRequests = fetchIncomingRequests();
   }
 
-  static const String baseUrl = "http://192.168.1.12:8000";
-
   Future<List<Map<String, dynamic>>> fetchIncomingRequests() async {
+    final baseUrl = await ApiConfig.getBaseUrl();
     final url = Uri.parse("$baseUrl/worker/${widget.workerId}/incoming-requests");
-    final response = await http.get(url);
+    final response = await AuthHttp.get(url);
 
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
@@ -39,8 +40,9 @@ class _IncomingRequestsPageState extends State<IncomingRequestsPage> {
   }
 
   Future<void> _respondToRequest(int requestId, String action) async {
+    final baseUrl = await ApiConfig.getBaseUrl();
     final url = Uri.parse("$baseUrl/job-request/$requestId/respond?decision=$action");
-    final response = await http.post(
+    final response = await AuthHttp.post(
       url,
       headers: {"Content-Type": "application/json"},
     );
@@ -224,7 +226,7 @@ class _IncomingRequestsPageState extends State<IncomingRequestsPage> {
                         children: [
                           const SizedBox(width: 4),
                           Text(
-                            distance != null ? "${distance} km away" : "Distance unknown",
+                            distance != null ? "$distance km away" : "Distance unknown",
                             style: const TextStyle(fontSize: 13),
                           ),
                         ],

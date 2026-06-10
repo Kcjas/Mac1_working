@@ -1,14 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'auth_http.dart';
 import '../models/WorkerProfile.dart';
 import '../models/CustomerProfile.dart';
 import '../models/acceptedworker.dart';
-
-const String BASE_URL = 'http://192.168.1.12:8000';
+import '../config/api_config.dart';
 
 class ApiService {
+  /// Get the base URL (async to support SharedPreferences)
+  static Future<String> get baseUrl async => await ApiConfig.getBaseUrl();
+  
   static Future<Workerprofile> fetchWorkerdata(int userId) async{
-     final response = await http.get(Uri.parse("$BASE_URL/worker_profile/$userId"));
+     final url = await baseUrl;
+     final response = await AuthHttp.get(Uri.parse("$url/worker_profile/$userId"));
 
     if(response.statusCode == 200){
       final data = json.decode(response.body);
@@ -19,7 +23,8 @@ class ApiService {
   }
 
   static Future<double> fetchWorkerRating(int userId) async{
-      final response = await http.get(Uri.parse("$BASE_URL/worker_rating/$userId"));
+      final url = await baseUrl;
+      final response = await AuthHttp.get(Uri.parse("$url/worker_rating/$userId"));
 
       if(response.statusCode == 200){
         final data = json.decode(response.body);
@@ -31,7 +36,8 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> fetchLeaderboard() async {
-    final response = await http.get(Uri.parse("$BASE_URL/worker/leaderboard"));
+    final url = await baseUrl;
+    final response = await AuthHttp.get(Uri.parse("$url/worker/leaderboard"));
     if (response.statusCode == 200) {
       return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       } else {
@@ -40,7 +46,8 @@ class ApiService {
   }
 
   static Future<Customerprofile> fetchCustomerProfile(int userId) async {
-    final response = await http.get(Uri.parse("$BASE_URL/customer/profile/$userId"));
+    final url = await baseUrl;
+    final response = await AuthHttp.get(Uri.parse("$url/customer/profile/$userId"));
   
     if (response.statusCode == 200) {
       return Customerprofile.fromJson(json.decode(response.body));
@@ -52,8 +59,9 @@ class ApiService {
 
 
   Future<List<AcceptedWorker>> fetchAcceptedWorkers(int userId) async {
-    final uri = Uri.parse('$BASE_URL/customer/$userId/accepted-workers');
-    final response = await http.get(uri);
+    final url = await ApiConfig.getBaseUrl();
+    final uri = Uri.parse('$url/customer/$userId/accepted-workers');
+    final response = await AuthHttp.get(uri);
 
     if (response.statusCode == 200) {
       final List data = json.decode(response.body);
@@ -71,8 +79,9 @@ class ApiService {
     required String date,
     required String time,
   }) async {
-    final response = await http.post(
-      Uri.parse('$BASE_URL/book'), 
+    final url = await baseUrl;
+    final response = await AuthHttp.post(
+      Uri.parse('$url/book'), 
       headers: {'Content-Type': 'application/json'},
     body: jsonEncode({
       "customer_id": customerId,
@@ -90,6 +99,31 @@ class ApiService {
     return {"success": false, "error": response.body};
   }
 }
+
+
+  static Future<List<Map<String, dynamic>>> fetchCustomerUpcomingJobs(int userId) async {
+    final url = await baseUrl;
+    final response = await AuthHttp.get(Uri.parse("$url/customer/$userId/upcoming-jobs"));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    } else {
+      throw Exception("Failed to load upcoming bookings");
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchWorkerCompletedJobs(int userId) async {
+    final url = await baseUrl;
+    final response = await AuthHttp.get(Uri.parse("$url/worker/$userId/completed-jobs"));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data.cast<Map<String, dynamic>>();
+    } else {
+      throw Exception("Failed to load completed bookings");
+    }
+  }
 
 }
 

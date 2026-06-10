@@ -213,15 +213,11 @@ def policy(state: Dict[str, Any], user_msg: str, meta: Dict[str, Any]) -> str:
         if not suggestions:
             state["stage"] = "identify_skill"
             return "Let's try again. Which service do you need? (plumber, electrician, cleaning, or HVAC)"
-
-        # Use the lowercase version for parsing (extract_choice normalizes anyway)
         choice = extract_choice(user_msg_lower, max_choice=len(suggestions))
         if choice is None:
             return "Please reply with 1, 2, or 3 to choose a worker."
+        chosen = suggestions[choice - 1]  
 
-        chosen = suggestions[choice - 1]  # dict
-
-        # Build redirect payload in the shape the Flutter client expects
         state["redirect"] = {
             "path": "/job-request",
             "params": {

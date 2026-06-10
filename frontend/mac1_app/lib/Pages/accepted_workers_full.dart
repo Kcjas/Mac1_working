@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
+import '../config/api_config.dart';
 
 class AcceptedWorkersFull extends StatefulWidget {
   final int userId;
@@ -28,11 +30,12 @@ class _AcceptedWorkersFullState extends State<AcceptedWorkersFull> {
   }
 
   Future<List<dynamic>> _fetchAccepted() async {
+    final baseUrl = await ApiConfig.getBaseUrl();
     final url = Uri.parse(
-      'http://192.168.1.12:8000/customer/${widget.userId}/accepted-workers',
+      '$baseUrl/customer/${widget.userId}/accepted-workers',
     );
 
-    final res = await http.get(url);
+    final res = await AuthHttp.get(url);
 
     if (res.statusCode == 200) {
       final decoded = jsonDecode(res.body);
@@ -51,10 +54,13 @@ class _AcceptedWorkersFullState extends State<AcceptedWorkersFull> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text("Accepted Workers"),
+        title: const Text(
+          "Accepted Workers",
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: Colors.black87,
+        foregroundColor: Colors.black,
       ),
       body: FutureBuilder<List<dynamic>>(
         future: _future,
@@ -132,9 +138,12 @@ class _AcceptedWorkersFullState extends State<AcceptedWorkersFull> {
                 final date = (w['date'] ?? '').toString();
                 final time = (w['time'] ?? '').toString();
 
-                return Card(
-                  elevation: 0.5,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Column(
@@ -143,10 +152,13 @@ class _AcceptedWorkersFullState extends State<AcceptedWorkersFull> {
                         // Top row
                         Row(
                           children: [
-                            const CircleAvatar(
-                              radius: 18,
-                              backgroundColor: Color(0xFFEDE7F6), // light purple tint
-                              child: Icon(Icons.person, color: Color(0xFF5E35B1)),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF4D00).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(Icons.person, color: Color(0xFFFF4D00), size: 24),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -208,20 +220,23 @@ class _AcceptedWorkersFullState extends State<AcceptedWorkersFull> {
                                 'skill': skill,
                                 'hourlyRate': w['hourly_rate'],
                                 'rating': w['rating'],
-                                'customerLat': widget.customerLat,
-                                'customerLon': widget.customerLon,
+                                // Use the location the job request was made at
+                                // (per-offer), not the customer's current GPS.
+                                'customerLat': w['customer_lat'] ?? widget.customerLat,
+                                'customerLon': w['customer_lon'] ?? widget.customerLon,
+                                'customerAddress': w['customer_address'],
                                 'date': w['date'],
                                 'time': w['time'],
                               },
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.purple.shade600,
+                              backgroundColor: const Color(0xFFFF4D00),
                               foregroundColor: Colors.white,
                               elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                              padding: const EdgeInsets.symmetric(vertical: 20),
                             ),
-                            child: const Text("Book"),
+                            child: const Text("Book", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class BookingPreview extends StatefulWidget {
   final int userId;
@@ -26,8 +28,9 @@ class _BookingPreviewState extends State<BookingPreview> {
   }
 
   Future<List<Map<String, dynamic>>> fetchPreviewJobs() async {
-    final url = Uri.parse("http://192.168.1.12:8000/worker/${widget.userId}/${widget.type}-jobs");
-    final response = await http.get(url);
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final url = Uri.parse("$baseUrl/worker/${widget.userId}/${widget.type}-jobs");
+    final response = await AuthHttp.get(url);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.cast<Map<String, dynamic>>();
@@ -189,7 +192,7 @@ class _BookingPreviewState extends State<BookingPreview> {
                       ],
                     ),
                   );
-                }).toList(),
+                }),
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
@@ -197,7 +200,7 @@ class _BookingPreviewState extends State<BookingPreview> {
                     onPressed: () {
                       Navigator.pushNamed(
                         context,
-                        widget.type == "pending" ? '/pendingJobs' : '/completedJobs',
+                        widget.type == "pending" ? '/pendingJobs' : '/workerCompletedJobList',
                         arguments: widget.userId,
                       );
                     },

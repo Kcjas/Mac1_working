@@ -1,11 +1,13 @@
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 from ..database import SessionLocal
 from ..models import User, Worker, Booking, Rating, JobRequest
 from ..notifications import send_to_token
+from ..auth_deps import get_current_user, require_worker, require_customer
 
 router = APIRouter(tags=["Jobs"])  
 
@@ -16,6 +18,7 @@ class JobRequestData(BaseModel):
     preferred_datetime: datetime
     customer_lat: float
     customer_lon: float
+    customer_address: Optional[str] = None
 
 
 class BookingCreate(BaseModel):
@@ -34,9 +37,8 @@ class JobCompleteData(BaseModel):
     reason: str
 
 
-# -------------------- Routes --------------------
 
-@router.post("/request_job/")
+@router.post("/request_job/", dependencies=[Depends(require_customer)])
 def request_job(data: JobRequestData):
     db = SessionLocal()
     try:
@@ -47,6 +49,7 @@ def request_job(data: JobRequestData):
             preferred_datetime=data.preferred_datetime,
             customer_lat=data.customer_lat,
             customer_lon=data.customer_lon,
+            customer_address=data.customer_address,
         )
         db.add(job)
         db.commit()
@@ -72,7 +75,7 @@ def request_job(data: JobRequestData):
         db.close()
 
 
-@router.post("/job-request/{job_id}/respond")
+@router.post("/job-request/{job_id}/respond", dependencies=[Depends(require_worker)])
 def respond_to_job(job_id: int, decision: str):
     db = SessionLocal()
     try:
@@ -103,7 +106,7 @@ def respond_to_job(job_id: int, decision: str):
         db.close()
 
 
-@router.post("/book")
+@router.post("/book", dependencies=[Depends(require_customer)])
 def create_booking(data: BookingCreate):
     db = SessionLocal()
     try:
@@ -120,7 +123,6 @@ def create_booking(data: BookingCreate):
         db.commit()
         db.refresh(booking)
 
-        # Remove accepted job_request between same customer & worker
         job_request = (
             db.query(JobRequest)
             .filter(
@@ -146,11 +148,10 @@ def create_booking(data: BookingCreate):
                 f"{booking.job_title} on {booking.date.isoformat()} at {booking.time.strftime('%H:%M')}",
                 data={
                     # Adjust to your desired landing page after booking
-                    "route": "/completedJobList"  # or "/customerHome"
+                    "route": "/completedJobList"  
                 }
             )
 
-        # Worker: you’re booked
         if worker_user and worker_user.fcm_token:
             send_to_token(
                 worker_user.fcm_token,
@@ -171,7 +172,7 @@ def create_booking(data: BookingCreate):
         db.close()
 
 
-@router.post("/booking/complete")
+@router.post("/booking/complete", dependencies=[Depends(require_worker)])
 def complete_booking(data: JobCompleteData):
     db = SessionLocal()
     try:
@@ -183,6 +184,7 @@ def complete_booking(data: JobCompleteData):
             raise HTTPException(status_code=404, detail="Worker not found")
 
         booking.status = "completed"
+        booking.completed_at = datetime.utcnow()  # anchors the 7-day chat auto-close window
         booking.time_taken = data.duration_hours
         booking.extra_cost = data.additional_cost
         booking.extra_reason = data.reason
@@ -224,7 +226,7 @@ def complete_booking(data: JobCompleteData):
         db.close()
 
 
-@router.get("/booking/{booking_id}/summary")
+@router.get("/booking/{booking_id}/summary", dependencies=[Depends(get_current_user)])
 def get_booking_summary(booking_id: int):
     db = SessionLocal()
     try:

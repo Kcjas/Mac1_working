@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import '../services/location_service.dart';
+import '../config/api_config.dart';
 
 class WorkerInfoPage extends StatefulWidget {
   final int userId;
-  const WorkerInfoPage({Key? key, required this.userId}) : super(key: key);
+  const WorkerInfoPage({super.key, required this.userId});
 
   @override
   State<WorkerInfoPage> createState() => _WorkerInfoPageState();
@@ -32,9 +34,10 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
 
     try {
       final pos = await LocationService.getCurrentLocation();
+      final baseUrl = await ApiConfig.getBaseUrl();
 
-      final res = await http.post(
-        Uri.parse('http://192.168.1.12:8000/worker_info'),
+      final res = await AuthHttp.post(
+        Uri.parse('$baseUrl/worker_info'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id': widget.userId,
@@ -103,17 +106,19 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
                   decoration: InputDecoration(
                     labelText: 'Skill',
                     hintText: 'plumber, electrician, cleaning, hvac',
+                    filled: true,
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: const BorderSide(color: Color(0xFFFF4D00), width: 2),
                     ),
                   ),
                   validator: (v) {
@@ -131,17 +136,19 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: 'Experience (years)',
+                    filled: true,
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: const BorderSide(color: Color(0xFFFF4D00), width: 2),
                     ),
                   ),
                   validator: (v) {
@@ -158,17 +165,19 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     labelText: 'Hourly Rate',
+                    filled: true,
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: const BorderSide(color: Color(0xFFFF4D00), width: 2),
                     ),
                   ),
                   validator: (v) {
@@ -182,22 +191,22 @@ class _WorkerInfoPageState extends State<WorkerInfoPage> {
                 ElevatedButton(
                   onPressed: _isSubmitting ? null : _submitWorkerInfo,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black87,
+                    backgroundColor: const Color(0xFFFF4D00),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     elevation: 0,
                   ),
                   child: _isSubmitting
                       ? const SizedBox(
-                          height: 18,
-                          width: 18,
+                          height: 20,
+                          width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : const Text('Submit', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                      : const Text('Submit', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),

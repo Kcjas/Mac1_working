@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class WalletPage extends StatefulWidget {
   final int workerId;
@@ -12,20 +14,21 @@ class WalletPage extends StatefulWidget {
 
 class _WalletPageState extends State<WalletPage> {
   double? balance;
+  List transactions = [];
   bool loading = true;
-
-  static const String baseUrl = "http://192.168.1.12:8000"; 
 
   Future<void> fetchWallet() async {
     try {
-      final res = await http.get(
+      final baseUrl = await ApiConfig.getBaseUrl();
+      final res = await AuthHttp.get(
         Uri.parse("$baseUrl/worker/${widget.workerId}/wallet"),
       );
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         setState(() {
-          balance = data["money_earned"]?.toDouble() ?? 0.0;
+          balance = (data["money_earned"] ?? 0).toDouble();
+          transactions = (data["transactions"] as List?) ?? [];
           loading = false;
         });
       } else {
@@ -114,10 +117,10 @@ class _WalletPageState extends State<WalletPage> {
                   ),
                   const SizedBox(height: 8),
 
-                  ...List.generate(3, (index) {
-                    final amounts = [200.0, 250.0, 300.0];
-                    final jobIds = [1023, 1022, 1021];
-                    final dates = ['Today', 'Yesterday', '2 days ago'];
+                  ...transactions.map((t) {
+                    final amount = t['amount'];
+                    final jobId = t['booking_id'];
+                    final date = t['date'] != null ? t['date'].toString().split('T')[0] : 'Unknown';
                     
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -134,7 +137,7 @@ class _WalletPageState extends State<WalletPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  "Job #${jobIds[index]} completed",
+                                  "Job #$jobId completed",
                                   style: const TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
@@ -143,7 +146,7 @@ class _WalletPageState extends State<WalletPage> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  dates[index],
+                                  date,
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: Colors.grey[600],
@@ -153,7 +156,7 @@ class _WalletPageState extends State<WalletPage> {
                             ),
                           ),
                           Text(
-                            "+\$${amounts[index].toStringAsFixed(2)}",
+                            "+\$${amount.toStringAsFixed(2)}",
                             style: const TextStyle(
                               color: Colors.black87,
                               fontWeight: FontWeight.bold,
@@ -164,6 +167,14 @@ class _WalletPageState extends State<WalletPage> {
                       ),
                     );
                   }),
+
+                  if (transactions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(
+                        child: Text("No transactions yet"),
+                      ),
+                    ),
 
                   const SizedBox(height: 16)
                 ],

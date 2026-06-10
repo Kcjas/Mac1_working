@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class RateWorkerPage extends StatefulWidget {
   final int customerId;
@@ -32,8 +34,9 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
     setState(() => _isSubmitting = true);
 
     try {
-      final response = await http.post(
-        Uri.parse("http://192.168.1.12:8000/rate"),
+      final baseUrl = await ApiConfig.getBaseUrl();
+      final response = await AuthHttp.post(
+        Uri.parse("$baseUrl/rate"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "customer_id": widget.customerId,
@@ -67,7 +70,15 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(title: const Text("Rate Worker"),backgroundColor: Colors.white,elevation: 0,foregroundColor: Colors.black,),
+      appBar: AppBar(
+        title: const Text(
+          "Rate Worker",
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        foregroundColor: Colors.black,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -101,10 +112,10 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
               enabled: !_isSubmitting,
               decoration: InputDecoration(
                 hintText: "Share your feedback...",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),borderSide: BorderSide(color: Colors.grey.shade300),),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),borderSide: BorderSide(color: Colors.grey.shade300),),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),borderSide: BorderSide(color: Colors.grey.shade400, width: 1),),
-                contentPadding: const EdgeInsets.all(12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20),borderSide: BorderSide(color: Colors.grey.shade300),),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20),borderSide: BorderSide(color: Colors.grey.shade300),),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20),borderSide: const BorderSide(color: Color(0xFFFF4D00), width: 2),),
+                contentPadding: const EdgeInsets.all(16),
                 isDense: true,
               ),
               style: const TextStyle(fontSize: 14),
@@ -114,19 +125,19 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _isSubmitting ? null : submitRating,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.black87,
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF4D00),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: 20),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   elevation: 0,
                 ),
                 child: _isSubmitting ? const SizedBox(
-                  height: 18,
-                  width: 18,
+                  height: 20,
+                  width: 20,
                   child: CircularProgressIndicator(strokeWidth: 2,valueColor: AlwaysStoppedAnimation<Color>(Colors.white),), ) 
-                  : const Text("Submit"),
+                  : const Text("Submit", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             ),
           ],

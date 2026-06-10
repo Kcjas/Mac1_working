@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
 import 'jobrequest.dart';
+import '../config/api_config.dart';
 
 class ServiceWorkersPage extends StatefulWidget {
   final String skill;
@@ -33,9 +35,10 @@ class _ServiceWorkersPageState extends State<ServiceWorkersPage> {
   }
 
   Future<List<Map<String, dynamic>>> fetchWorkersBySkill(String skill) async {
+    final baseUrl = await ApiConfig.getBaseUrl();
     final url = Uri.parse(
-        "http://192.168.1.12:8000/workers/skill/$skill?customer_lat=${widget.customerLat}&customer_lon=${widget.customerLon}");
-    final response = await http.get(url);
+        "$baseUrl/workers/skill/$skill?customer_lat=${widget.customerLat}&customer_lon=${widget.customerLon}");
+    final response = await AuthHttp.get(url);
 
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);

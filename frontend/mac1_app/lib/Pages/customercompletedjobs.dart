@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
 
 class Customercompletedjobs extends StatefulWidget {
   final int userId;
@@ -21,9 +23,10 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
   }
 
   Future<List<Map<String, dynamic>>> fetchCompletedJobs(int userId) async {
-    final url = Uri.parse("http://192.168.1.12:8000/customer/$userId/completed-jobs");
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final url = Uri.parse("$baseUrl/customer/$userId/completed-jobs");
 
-    final response = await http.get(url);
+    final response = await AuthHttp.get(url);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.cast<Map<String, dynamic>>();
@@ -37,10 +40,13 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text("Completed Jobs", style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text(
+          "Completed Jobs",
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
-        foregroundColor: Colors.black87,
+        foregroundColor: Colors.black,
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _completedJobs,
@@ -83,15 +89,8 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.shade100,
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -104,12 +103,12 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade50,
+                              color: const Color(0xFFFF4D00).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(
+                            child: const Icon(
                               Icons.check_circle,
-                              color: Colors.green.shade600,
+                              color: Color(0xFFFF4D00),
                               size: 24,
                             ),
                           ),
@@ -176,13 +175,13 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
                                 );
                               },
                               icon: const Icon(Icons.receipt_long, size: 18),
-                              label: const Text("Payslip"),
+                              label: const Text("Invoice"),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade600,
+                                backgroundColor: const Color(0xFF1A1A1A),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                                 elevation: 0,
                               ),
@@ -204,11 +203,11 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
                               icon: const Icon(Icons.star, size: 18),
                               label: const Text("Rate"),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.shade600,
+                                backgroundColor: const Color(0xFFFF4D00),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                                 elevation: 0,
                               ),

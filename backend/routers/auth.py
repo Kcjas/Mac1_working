@@ -1,10 +1,13 @@
-# backend/routers/auth.py
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
 from ..models import User
+from ..security import hash_password, verify_password, create_access_token
+from ..auth_deps import get_current_user
+from ..limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -24,6 +27,8 @@ class AuthResponse(BaseModel):
     message: str
     user_id: int
     role: str
+    access_token: str
+    token_type: str = "bearer"
 
 class UpdateTokenPayload(BaseModel):
     user_id: int
@@ -35,45 +40,74 @@ def _get_db() -> Session:
 
 
 @router.post("/signup", response_model=AuthResponse)
-def signup(data: SignupData):
+@limiter.limit("3/minute")
+def signup(request: Request, data: SignupData):
     db = _get_db()
     try:
         existing = db.query(User).filter(User.email == data.email).first()
         if existing:
             raise HTTPException(status_code=409, detail="Email already registered")
 
-        
+        try:
+            hashed = hash_password(data.password)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
         user = User(
             name=data.name,
             age=data.age,
             gender=data.gender,
             email=data.email,
-            password=data.password,
+            password=hashed,
             role=data.role,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
 
-        return AuthResponse(message="Signup successful", user_id=user.id, role=user.role)
+        token = create_access_token(user.id, user.role)
+        return AuthResponse(
+            message="Signup successful",
+            user_id=user.id,
+            role=user.role,
+            access_token=token,
+        )
     finally:
         db.close()
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(data: LoginData):
+@limiter.limit("5/minute")
+def login(request: Request, data: LoginData):
     db = _get_db()
     try:
         user = db.query(User).filter(User.email == data.email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+        if not user or not verify_password(data.password, user.password):
+            # Same error for unknown email and wrong password to avoid leaking
+            # which accounts exist.
+            raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        if user.password != data.password:
-            raise HTTPException(status_code=401, detail="Incorrect password")
-
-        return AuthResponse(message="Login successful", user_id=user.id, role=user.role)
+        token = create_access_token(user.id, user.role)
+        return AuthResponse(
+            message="Login successful",
+            user_id=user.id,
+            role=user.role,
+            access_token=token,
+        )
     finally:
         db.close()
+
+
+@router.get("/me")
+def me(current_user: User = Depends(get_current_user)):
+    """Return the authenticated user's basic profile (used by the client to
+    validate a stored token on startup)."""
+    return {
+        "user_id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+    }
 
 @router.post("/update_token")
 def update_token(payload: UpdateTokenPayload):

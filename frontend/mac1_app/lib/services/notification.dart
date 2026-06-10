@@ -1,12 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
-
-
-const String BASE_URL = "http://192.168.1.12:8000";
+import '../config/api_config.dart';
+import 'auth_manager.dart';
 
 class NotificationService {
   NotificationService._();
@@ -82,7 +80,8 @@ class NotificationService {
     _currentUserId = userId;
     final token = await _fm.getToken();
     if (token == null) return;
-    final url = Uri.parse("$BASE_URL/auth/update_token");
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final url = Uri.parse("$baseUrl/auth/update_token");
     await http.post(
       url,
       headers: {"Content-Type": "application/json"},
@@ -90,7 +89,8 @@ class NotificationService {
     );
 
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
-      final url = Uri.parse("$BASE_URL/auth/update_token");
+      final baseUrl = await ApiConfig.getBaseUrl();
+      final url = Uri.parse("$baseUrl/auth/update_token");
       await http.post(
         url,
         headers: {"Content-Type": "application/json"},
@@ -117,7 +117,11 @@ class NotificationService {
       case '/acceptedWorkerList': {
         final userId = _currentUserId;
         if (userId != null) {
-          navigator.pushNamed('/acceptedWorkerList', arguments: userId);
+          navigator.pushNamed('/acceptedWorkers', arguments: {
+            'userId': userId,
+            'customerLat': 0.0,
+            'customerLon': 0.0,
+          });
         }
         break;
       }
@@ -149,7 +153,7 @@ class NotificationService {
       case '/completedJobList': {
         final userId = _currentUserId;
         if (userId != null) {
-          navigator.pushNamed('/completedJobList', arguments: userId);
+          navigator.pushNamed('/customerCompletedJobs', arguments: userId);
         }
         break;
       }
@@ -179,6 +183,3 @@ class NotificationService {
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 }
-
-
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();

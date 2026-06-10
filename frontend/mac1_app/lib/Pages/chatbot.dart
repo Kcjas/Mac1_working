@@ -1,9 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import '../config/api_config.dart';
 
 class ChatScreen extends StatefulWidget {
   final int? userId;
@@ -24,8 +25,10 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  static const String apiBase = "http://192.168.1.12:8000";
-  Uri _api(String path) => Uri.parse("$apiBase$path");
+  Future<Uri> _api(String path) async {
+    final baseUrl = await ApiConfig.getBaseUrl();
+    return Uri.parse("$baseUrl$path");
+  }
 
   final _controller = TextEditingController();
   final _scroll = ScrollController();
@@ -133,8 +136,9 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      final res = await http.post(
-        _api("/convai/message"),
+      final apiUrl = await _api("/convai/message");
+      final res = await AuthHttp.post(
+        apiUrl,
         headers: {"Content-Type": "application/json"},
         body: json.encode({
           "session_id": _sessionId,

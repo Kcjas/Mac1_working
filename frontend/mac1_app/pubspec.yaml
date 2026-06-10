@@ -41,8 +41,14 @@ dependencies:
   intl: ^0.20.2
   firebase_core: ^4.1.1
   firebase_messaging: ^16.0.2
-  fl_chart: ^1.1.0
+  fl_chart: ^1.1.1
   flutter_local_notifications: ^19.5.0
+  shared_preferences: ^2.3.4
+  flutter_secure_storage: ^9.2.2
+  # vector_math: ^2.1.6 (Removed to prevent direct conflict, added to overrides)
+
+dependency_overrides:
+  vector_math: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -59,7 +65,7 @@ dev_dependencies:
 flutter_icons:
   android: true
   ios: true
-  image_path: "frontend/mac1_app/assests/icons/app_icon.png"
+  image_path: "assets/icons/app_icon.png"
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

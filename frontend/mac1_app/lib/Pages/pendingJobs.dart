@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import '../services/auth_http.dart';
 import 'dart:convert';
+import '../config/api_config.dart';
+import 'widgets/chat_message_button.dart';
 
 class PendingJobsPage extends StatefulWidget {
   final int userId;
@@ -21,8 +23,9 @@ class _PendingJobsPageState extends State<PendingJobsPage> {
   }
 
   Future<List<Map<String, dynamic>>> fetchPendingJobs() async {
-    final url = Uri.parse("http://192.168.1.12:8000/worker/${widget.userId}/pending-jobs");
-    final response = await http.get(url);
+    final baseUrl = await ApiConfig.getBaseUrl();
+    final url = Uri.parse("$baseUrl/worker/${widget.userId}/pending-jobs");
+    final response = await AuthHttp.get(url);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.cast<Map<String, dynamic>>();
@@ -153,33 +156,49 @@ class _PendingJobsPageState extends State<PendingJobsPage> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushNamed(
+                      Row(
+                        children: [
+                          MessageButton(
+                            unread: (job['unread_count'] as num?)?.toInt() ?? 0,
+                            onPressed: () => Navigator.pushNamed(
                               context,
-                              '/completedJobs',
+                              '/chat',
                               arguments: {
-                                'booking_id': job['booking_id'],
-                                'userId': widget.userId
+                                'bookingId': job['booking_id'],
+                                'otherName': job['customer_name'] ?? 'Customer',
+                                'chatOpen': true,
                               },
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black87,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                            ).then((_) => setState(() => _jobsFuture = fetchPendingJobs())),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/completedJobs',
+                                  arguments: {
+                                    'booking_id': job['booking_id'],
+                                    'userId': widget.userId
+                                  },
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black87,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: const Text(
+                                "Mark as Complete",
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                              ),
                             ),
-                            elevation: 0,
                           ),
-                          child: const Text(
-                            "Mark as Complete",
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                        ),
+                        ],
                       ),
                     ],
                   ),

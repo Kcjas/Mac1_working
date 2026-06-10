@@ -44,7 +44,9 @@ class Booking(Base):
     time = Column(Time)
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
-    time_taken = Column(Float, default=0.0)     
+    completed_at = Column(DateTime, nullable=True)  # set when status -> "completed"; anchors chat auto-close
+    chat_force_open = Column(Boolean, default=False)  # admin override to reopen chat after the 7-day window
+    time_taken = Column(Float, default=0.0)
     extra_cost = Column(Float, default=0.0)
     extra_reason = Column(String, default="")
 
@@ -62,6 +64,17 @@ class Rating(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 
+class Message(Base):
+    __tablename__ = "messages"
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id"), index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"))
+    body = Column(String)
+    message_type = Column(String, default="text")  # future: image / system / location
+    created_at = Column(DateTime, default=datetime.utcnow)
+    read_at = Column(DateTime, nullable=True)  # null = unread by the recipient
+
+
 class JobRequest(Base):
     __tablename__ = "job_requests"
     id = Column(Integer, primary_key=True, index=True)
@@ -72,6 +85,7 @@ class JobRequest(Base):
     status = Column(String, default="pending")
     customer_lat = Column(Float)
     customer_lon = Column(Float)
+    customer_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     customer = relationship("User", foreign_keys=[customer_id])
