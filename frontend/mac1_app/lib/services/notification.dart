@@ -142,10 +142,12 @@ class NotificationService {
       case '/rate': {
         final customerId = int.tryParse(data['customerId']?.toString() ?? '');
         final workerId   = int.tryParse(data['workerId']?.toString() ?? '');
+        final bookingId  = int.tryParse(data['bookingId']?.toString() ?? '');
         if (customerId != null && workerId != null) {
           navigator.pushNamed('/rate', arguments: {
             'customer_id': customerId,
             'worker_id': workerId,
+            'booking_id': bookingId ?? 0,
           });
         }
         break;

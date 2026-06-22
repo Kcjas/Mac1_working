@@ -204,8 +204,8 @@ class MyApp extends StatelessWidget {
               return MaterialPageRoute(
                 builder: (_) => ServiceWorkersPage(
                   skill: args['skill'] ?? '',
-                  customerLat: (args['customerLat'] as num).toDouble(),
-                  customerLon: (args['customerLon'] as num).toDouble(),
+                  customerLat: (args['customerLat'] as num?)?.toDouble() ?? 0.0,
+                  customerLon: (args['customerLon'] as num?)?.toDouble() ?? 0.0,
                   customerId: args['customerId'] ?? 0,
                   customerAddress: args['customerAddress'] ?? '',
                 ),
@@ -258,10 +258,10 @@ class MyApp extends StatelessWidget {
                   workerId: args['workerId'] ?? 0,
                   workerName: args['workerName'] ?? '',
                   workerSkill: args['workerSkill'] ?? '',
-                  hourlyRate: (args['hourlyRate'] as num).toDouble(),
-                  distance: (args['distance'] as num).toDouble(),
-                  customerLat: (args['customerLat'] as num).toDouble(),
-                  customerLon: (args['customerLon'] as num).toDouble(),
+                  hourlyRate: (args['hourlyRate'] as num?)?.toDouble() ?? 0.0,
+                  distance: (args['distance'] as num?)?.toDouble() ?? 0.0,
+                  customerLat: (args['customerLat'] as num?)?.toDouble() ?? 0.0,
+                  customerLon: (args['customerLon'] as num?)?.toDouble() ?? 0.0,
                   customerAddress: args['customerAddress'] ?? '',
                   problem: args['problem'] ?? '',
                 ),
@@ -277,10 +277,10 @@ class MyApp extends StatelessWidget {
                   workerId: args['workerId'] ?? 0,
                   workerName: args['workerName'] ?? '',
                   skill: args['skill'] ?? '',
-                  hourlyRate: (args['hourlyRate'] as num).toDouble(),
-                  rating: (args['rating'] as num).toDouble(),
-                  customerLat: (args['customerLat'] as num).toDouble(),
-                  customerLon: (args['customerLon'] as num).toDouble(),
+                  hourlyRate: (args['hourlyRate'] as num?)?.toDouble() ?? 0.0,
+                  rating: (args['rating'] as num?)?.toDouble() ?? 0.0,
+                  customerLat: (args['customerLat'] as num?)?.toDouble() ?? 0.0,
+                  customerLon: (args['customerLon'] as num?)?.toDouble() ?? 0.0,
                   customerAddress: args['customerAddress'] as String?,
                   date: args['date'] ?? '',
                   time: args['time'] ?? '',
@@ -318,6 +318,7 @@ class MyApp extends StatelessWidget {
                 builder: (_) => RateWorkerPage(
                   customerId: args['customer_id'] ?? 0,
                   workerId: args['worker_id'] ?? 0,
+                  bookingId: args['booking_id'] ?? 0,
                 ),
               );
             }

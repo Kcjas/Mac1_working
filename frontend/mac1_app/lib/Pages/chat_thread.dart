@@ -4,16 +4,11 @@ import 'package:flutter/material.dart';
 import '../services/auth_http.dart';
 import '../config/api_config.dart';
 
-/// 1:1 chat between the customer and worker of a booking.
-///
-/// Poll-based (the backend has no WebSocket layer): while the screen is open we
-/// fetch new messages every few seconds via `GET /chat/{id}/messages?after_id=`.
-/// Reads are pure; we mark the other party's messages read with an explicit
-/// `POST /chat/{id}/read`. Chat closes 7 days after the booking is completed.
 class ChatThreadPage extends StatefulWidget {
   final int bookingId;
   final String otherName;
   final bool chatOpen;
+
 
   const ChatThreadPage({
     super.key,

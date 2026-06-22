@@ -29,8 +29,22 @@ class RatingData:
     review: str = ""
 
 
-@router.post("/worker_info", dependencies=[Depends(require_worker)])
-def add_worker_info(data: dict):
+def _require_self_worker(worker_id: int, current: User) -> None:
+    """Block a worker from reading another worker's jobs/wallet.
+
+    Role is already enforced by ``require_worker``; this asserts the caller owns
+    the worker id in the path, using the identity from the verified JWT.
+    """
+    if worker_id != current.id:
+        raise HTTPException(status_code=403, detail="You can only access your own data")
+
+
+@router.post("/worker_info")
+def add_worker_info(data: dict, current: User = Depends(require_worker)):
+    # A worker may only create their own profile, not claim one for another id.
+    if data.get("user_id") != current.id:
+        raise HTTPException(status_code=403, detail="You can only create your own worker profile")
+
     db = SessionLocal()
 
     ALLOWED_SKILLS = {"plumber", "electrician", "cleaning", "hvac"}
@@ -73,6 +87,9 @@ def get_worker_profile(user_id: int):
     user = db.query(User).filter(User.id == user_id).first()
     db.close()
 
+    if not user:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
     return {
         "name": user.name,
         "age": user.age,
@@ -83,8 +100,9 @@ def get_worker_profile(user_id: int):
     }
 
 
-@router.get("/worker/{worker_id}/pending-jobs", dependencies=[Depends(require_worker)])
-def get_pending_jobs(worker_id: int):
+@router.get("/worker/{worker_id}/pending-jobs")
+def get_pending_jobs(worker_id: int, current: User = Depends(require_worker)):
+    _require_self_worker(worker_id, current)
     db = SessionLocal()
     jobs = db.query(Booking).filter(
         Booking.worker_id == worker_id,
@@ -110,8 +128,9 @@ def get_pending_jobs(worker_id: int):
     return result
 
 
-@router.get("/worker/{worker_id}/completed-jobs", dependencies=[Depends(require_worker)])
-def get_completed_jobs(worker_id: int):
+@router.get("/worker/{worker_id}/completed-jobs")
+def get_completed_jobs(worker_id: int, current: User = Depends(require_worker)):
+    _require_self_worker(worker_id, current)
     db = SessionLocal()
     jobs = db.query(Booking).filter(
         Booking.worker_id == worker_id,
@@ -128,31 +147,57 @@ def get_completed_jobs(worker_id: int):
     } for job in jobs]
 
 
-@router.post("/rate", dependencies=[Depends(require_customer)])
-def rate_worker(data: dict):
+@router.post("/rate")
+def rate_worker(data: dict, current: User = Depends(require_customer)):
     db = SessionLocal()
     try:
-        if data["rating"] < 1 or data["rating"] > 5:
-            raise HTTPException(status_code=400, detail="Rating must be between 1 to 5")
+        rating_value = data.get("rating")
+        if not isinstance(rating_value, int) or rating_value < 1 or rating_value > 5:
+            raise HTTPException(status_code=400, detail="Rating must be an integer between 1 and 5")
+
+        booking_id = data.get("booking_id")
+        if booking_id is None:
+            raise HTTPException(status_code=400, detail="booking_id is required")
+
+        # The rating must hang off a real completed booking that belongs to the
+        # caller. Every field below is derived from that booking, never trusted
+        # from the request body — this closes self-rating / rate-off-someone-
+        # else's-booking / fake-review holes.
+        booking = db.query(Booking).filter(Booking.id == booking_id).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        if booking.customer_id != current.id:
+            raise HTTPException(status_code=403, detail="You can only rate your own bookings")
+        if booking.worker_id == current.id:
+            raise HTTPException(status_code=403, detail="You cannot rate yourself")
+        if data.get("worker_id") is not None and booking.worker_id != data.get("worker_id"):
+            raise HTTPException(status_code=400, detail="Worker does not match this booking")
+        if booking.status != "completed":
+            raise HTTPException(status_code=400, detail="You can only rate a completed booking")
+
+        # One review per job.
+        if db.query(Rating).filter(Rating.booking_id == booking_id).first():
+            raise HTTPException(status_code=409, detail="This booking has already been rated")
 
         new_rating = Rating(
-            customer_id=data["customer_id"],
-            worker_id=data["worker_id"],
-            rating=data["rating"],
+            customer_id=current.id,          # from the token, never the body
+            worker_id=booking.worker_id,     # authoritative, from the booking
+            booking_id=booking_id,
+            rating=rating_value,
             review=data.get("review", "")
         )
         db.add(new_rating)
         db.commit()
         db.refresh(new_rating)
-        worker_user = db.query(User).filter(User.id == data["worker_id"]).first()
+        worker_user = db.query(User).filter(User.id == booking.worker_id).first()
         if worker_user and worker_user.fcm_token:
             send_to_token(
                 worker_user.fcm_token,
                 "New Rating Received",
-                f"You received {data['rating']}★" + (f" — \"{data.get('review','')}\"" if data.get('review') else ""),
+                f"You received {rating_value}★" + (f" — \"{data.get('review','')}\"" if data.get('review') else ""),
                 data={
                     "route": "/workerHome",
-                    "workerId": str(data["worker_id"])
+                    "workerId": str(booking.worker_id)
                 }
             )
 
@@ -195,6 +240,7 @@ def get_workers_by_skill(skill: str, customer_lat: float, customer_lon: float):
             db.query(Worker, User)
             .join(User, Worker.user_id == User.id)
             .filter(Worker.skill == skill.lower())
+            .filter(Worker.status != "banned")  # banned workers are never shown
             .all()
         )
 
@@ -212,7 +258,8 @@ def get_workers_by_skill(skill: str, customer_lat: float, customer_lon: float):
                 "name": user.name,
                 "hourly_rate": worker.hourly_rate,
                 "rating": round(avg_rating, 2),
-                "distance": round(distance, 2)
+                "distance": round(distance, 2),
+                "is_verified": bool(worker.is_verified),
             })
         result.sort(key=lambda x: x["distance"])
         return result
@@ -220,8 +267,9 @@ def get_workers_by_skill(skill: str, customer_lat: float, customer_lon: float):
         db.close()
 
 
-@router.get("/worker/{worker_id}/incoming-requests", dependencies=[Depends(require_worker)])
-def get_incoming_requests(worker_id: int):
+@router.get("/worker/{worker_id}/incoming-requests")
+def get_incoming_requests(worker_id: int, current: User = Depends(require_worker)):
+    _require_self_worker(worker_id, current)
     db = SessionLocal()
     try:
         worker = db.query(Worker).filter(Worker.user_id == worker_id).first()
@@ -259,8 +307,9 @@ def get_incoming_requests(worker_id: int):
         db.close()
 
 
-@router.get("/worker/{worker_id}/wallet", dependencies=[Depends(require_worker)])
-def get_wallet(worker_id: int, limit: int = 10):
+@router.get("/worker/{worker_id}/wallet")
+def get_wallet(worker_id: int, current: User = Depends(require_worker), limit: int = 10):
+    _require_self_worker(worker_id, current)
     db = SessionLocal()
     try:
         worker = db.query(Worker).filter(Worker.user_id == worker_id).first()

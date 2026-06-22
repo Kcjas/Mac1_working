@@ -44,6 +44,11 @@ def _get_db() -> Session:
 def signup(request: Request, data: SignupData):
     db = _get_db()
     try:
+        # Public signup may only create customers or workers. Admin accounts are
+        # provisioned manually in the DB — never grantable via this open endpoint.
+        if data.role not in ("customer", "worker"):
+            raise HTTPException(status_code=400, detail="Invalid role")
+
         existing = db.query(User).filter(User.email == data.email).first()
         if existing:
             raise HTTPException(status_code=409, detail="Email already registered")

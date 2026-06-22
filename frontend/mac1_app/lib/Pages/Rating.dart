@@ -7,11 +7,13 @@ import '../config/api_config.dart';
 class RateWorkerPage extends StatefulWidget {
   final int customerId;
   final int workerId;
+  final int bookingId;
 
   const RateWorkerPage({
     super.key,
     required this.customerId,
     required this.workerId,
+    required this.bookingId,
   });
 
   @override
@@ -41,6 +43,7 @@ class _RateWorkerPageState extends State<RateWorkerPage> {
         body: jsonEncode({
           "customer_id": widget.customerId,
           "worker_id": widget.workerId,
+          "booking_id": widget.bookingId,
           "rating": _rating,
           "review": _reviewController.text.trim(),
         }),

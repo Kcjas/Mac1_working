@@ -197,6 +197,7 @@ class _CompletedJobPageState extends State<Customercompletedjobs> {
                                   arguments: {
                                     'customer_id': widget.userId,
                                     'worker_id': job['worker_id'],
+                                    'booking_id': job['booking_id'],
                                   },
                                 );
                               },

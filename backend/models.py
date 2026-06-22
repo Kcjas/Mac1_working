@@ -29,6 +29,8 @@ class Worker(Base):
     longitude = Column(Float)
     hourly_rate = Column(Float)
     money_earned = Column(Float, default=0.0)
+    is_verified = Column(Boolean, default=False)   # admin-toggled trust badge
+    status = Column(String, default="active")       # 'active' | 'banned'
 
     user = relationship("User", back_populates="worker")
 
@@ -61,6 +63,7 @@ class Rating(Base):
     worker_id = Column(Integer, ForeignKey("users.id"))
     rating = Column(Integer)
     review = Column(String)
+    booking_id = Column(Integer, nullable=True)  # ties a rating to one completed job
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 

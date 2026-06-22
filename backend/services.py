@@ -3,8 +3,10 @@ import math
 from datetime import datetime
 from typing import List, Dict, Any
 
+from sqlalchemy import func
+
 from .database import SessionLocal
-from .models import Worker, User, JobRequest  
+from .models import Worker, User, JobRequest, Rating
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -23,6 +25,7 @@ def get_workers_by_skill(*, skill: str, user_lat: float, user_lon: float, limit:
             db.query(Worker, User)
             .join(User, Worker.user_id == User.id)
             .filter(Worker.skill == skill.lower())
+            .filter(Worker.status != "banned")  # banned workers are never suggested
             .all()
         )
 
@@ -32,17 +35,26 @@ def get_workers_by_skill(*, skill: str, user_lat: float, user_lon: float, limit:
                 continue
             dist = _haversine_km(user_lat, user_lon, float(w.latitude), float(w.longitude))
 
+            # Ratings live in the Rating table, not on Worker — aggregate the real
+            # average (same as workers.py) instead of the always-0.0 placeholder.
+            avg_rating = (
+                db.query(func.avg(Rating.rating))
+                .filter(Rating.worker_id == w.user_id)
+                .scalar()
+            ) or 0.0
+
             out.append({
-    
-                "user_id": int(w.user_id),            
-                "profile_id": int(w.id),             
+
+                "user_id": int(w.user_id),
+                "profile_id": int(w.id),
                 "id": int(w.user_id),
 
                 "name": (getattr(u, "full_name", None) or getattr(u, "name", None)
                          or getattr(u, "username", None) or f"Worker {w.user_id}"),
-                "rating": float(getattr(w, "rating", 0.0) or 0.0),
+                "rating": round(float(avg_rating), 2),
                 "hourly_rate": float(getattr(w, "hourly_rate", 0.0) or 0.0),
                 "distance_km": float(dist),
+                "is_verified": bool(getattr(w, "is_verified", False)),
             })
 
         out.sort(key=lambda x: x["distance_km"])

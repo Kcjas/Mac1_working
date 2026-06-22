@@ -85,11 +85,13 @@ def get_workers(
                 User.name.label("name"),
                 Worker.skill.label("skill"),
                 Worker.hourly_rate.label("hourly_rate"),
+                Worker.is_verified.label("is_verified"),
+                Worker.status.label("status"),
                 rating_avg,
             )
             .join(User, Worker.user_id == User.id)
             .outerjoin(Rating, Rating.worker_id == Worker.user_id)
-            .group_by(Worker.id, User.name, Worker.skill, Worker.hourly_rate)
+            .group_by(Worker.id, User.name, Worker.skill, Worker.hourly_rate, Worker.is_verified, Worker.status)
         )
 
         if skill:
@@ -110,6 +112,8 @@ def get_workers(
                 "skill": w.skill,
                 "hourly_rate": float(w.hourly_rate or 0.0),
                 "rating": round(float(w.rating or 0.0), 2),
+                "is_verified": bool(w.is_verified),
+                "status": w.status or "active",
             }
             for w in items
         ]
@@ -134,6 +138,41 @@ def update_worker(worker_id: int, payload: dict):
         return {"ok": True}
     finally:
         db.close()
+
+
+# --- Worker trust controls (admin-only; the ONLY writers of is_verified/status) ---
+# Keyed on Worker.id to match the rest of the admin worker endpoints.
+def _set_worker_field(worker_id: int, field: str, value):
+    db = SessionLocal()
+    try:
+        w = db.query(Worker).get(worker_id)
+        if not w:
+            raise HTTPException(status_code=404, detail="Worker not found")
+        setattr(w, field, value)
+        db.commit()
+        return {"ok": True, "worker_id": worker_id, field: value}
+    finally:
+        db.close()
+
+
+@router.post("/workers/{worker_id}/verify")
+def verify_worker(worker_id: int):
+    return _set_worker_field(worker_id, "is_verified", True)
+
+
+@router.post("/workers/{worker_id}/unverify")
+def unverify_worker(worker_id: int):
+    return _set_worker_field(worker_id, "is_verified", False)
+
+
+@router.post("/workers/{worker_id}/ban")
+def ban_worker(worker_id: int):
+    return _set_worker_field(worker_id, "status", "banned")
+
+
+@router.post("/workers/{worker_id}/unban")
+def unban_worker(worker_id: int):
+    return _set_worker_field(worker_id, "status", "active")
 
 
 

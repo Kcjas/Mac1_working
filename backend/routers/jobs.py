@@ -38,8 +38,11 @@ class JobCompleteData(BaseModel):
 
 
 
-@router.post("/request_job/", dependencies=[Depends(require_customer)])
-def request_job(data: JobRequestData):
+@router.post("/request_job/")
+def request_job(data: JobRequestData, current: User = Depends(require_customer)):
+    # The request must be sent as the authenticated customer, not a spoofed id.
+    if data.customer_id != current.id:
+        raise HTTPException(status_code=403, detail="You can only send job requests as yourself")
     db = SessionLocal()
     try:
         job = JobRequest(
@@ -75,13 +78,17 @@ def request_job(data: JobRequestData):
         db.close()
 
 
-@router.post("/job-request/{job_id}/respond", dependencies=[Depends(require_worker)])
-def respond_to_job(job_id: int, decision: str):
+@router.post("/job-request/{job_id}/respond")
+def respond_to_job(job_id: int, decision: str, current: User = Depends(require_worker)):
     db = SessionLocal()
     try:
         job = db.query(JobRequest).filter(JobRequest.id == job_id).first()
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
+
+        # Only the worker the request was sent to may accept/reject it.
+        if job.worker_id != current.id:
+            raise HTTPException(status_code=403, detail="This job request is not yours")
 
         if decision not in ["accepted", "rejected"]:
             raise HTTPException(status_code=400, detail="Invalid decision")
@@ -106,8 +113,20 @@ def respond_to_job(job_id: int, decision: str):
         db.close()
 
 
-@router.post("/book", dependencies=[Depends(require_customer)])
-def create_booking(data: BookingCreate):
+@router.post("/book")
+def create_booking(data: BookingCreate, current: User = Depends(require_customer)):
+    # The booking must be created as the authenticated customer, not a spoofed id.
+    if data.customer_id != current.id:
+        raise HTTPException(status_code=403, detail="You can only create bookings as yourself")
+
+    # Validate date/time BEFORE the db try-block so a bad value returns 400,
+    # not a 500 swallowed by the generic exception handler below.
+    try:
+        booking_date = datetime.strptime(data.date, "%Y-%m-%d").date()
+        booking_time = datetime.strptime(data.time, "%H:%M").time()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date or time format (expected YYYY-MM-DD and HH:MM)")
+
     db = SessionLocal()
     try:
         booking = Booking(
@@ -115,25 +134,28 @@ def create_booking(data: BookingCreate):
             worker_id=data.worker_id,
             job_title=data.job_title,
             address=data.address,
-            date=datetime.strptime(data.date, "%Y-%m-%d").date(),
-            time=datetime.strptime(data.time, "%H:%M").time(),
+            date=booking_date,
+            time=booking_time,
             status="pending",
         )
         db.add(booking)
         db.commit()
         db.refresh(booking)
 
-        job_request = (
+        # Remove ALL matching accepted requests, not just the first, so stale
+        # offers for this customer+worker can't be re-used to book again.
+        stale_requests = (
             db.query(JobRequest)
             .filter(
                 JobRequest.customer_id == data.customer_id,
                 JobRequest.worker_id == data.worker_id,
                 JobRequest.status == "accepted",
             )
-            .first()
+            .all()
         )
-        if job_request:
-            db.delete(job_request)
+        for jr in stale_requests:
+            db.delete(jr)
+        if stale_requests:
             db.commit()
 
         # Notify both parties about booking creation
@@ -172,16 +194,28 @@ def create_booking(data: BookingCreate):
         db.close()
 
 
-@router.post("/booking/complete", dependencies=[Depends(require_worker)])
-def complete_booking(data: JobCompleteData):
+@router.post("/booking/complete")
+def complete_booking(data: JobCompleteData, current: User = Depends(require_worker)):
     db = SessionLocal()
     try:
         booking = db.query(Booking).filter(Booking.id == data.booking_id).first()
         if not booking:
             raise HTTPException(status_code=404, detail="Booking not found")
+
+        # Only the worker assigned to this booking may complete it and be paid for it.
+        if booking.worker_id != current.id:
+            raise HTTPException(status_code=403, detail="This booking is not yours")
+
         worker = db.query(Worker).filter(Worker.user_id == booking.worker_id).first()
         if not worker:
             raise HTTPException(status_code=404, detail="Worker not found")
+
+        # Sanity-bound the worker-supplied figures so hours/extras can't be
+        # inflated to absurd values (full customer-confirmed flow is roadmap).
+        if data.duration_hours <= 0 or data.duration_hours > 24:
+            raise HTTPException(status_code=400, detail="duration_hours must be between 0 and 24")
+        if data.additional_cost < 0:
+            raise HTTPException(status_code=400, detail="additional_cost cannot be negative")
 
         booking.status = "completed"
         booking.completed_at = datetime.utcnow()  # anchors the 7-day chat auto-close window
@@ -214,11 +248,16 @@ def complete_booking(data: JobCompleteData):
                 data={
                     "route": "/rate",
                     "customerId": str(booking.customer_id),
-                    "workerId": str(booking.worker_id)
+                    "workerId": str(booking.worker_id),
+                    "bookingId": str(booking.id)
                 }
             )
 
         return {"message": "Booking marked as completed successfully"}
+    except HTTPException:
+        # Let intended 4xx (404 not found, 403 not yours, 400 bad input) through
+        # instead of the generic handler below masking them as 500.
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -226,13 +265,17 @@ def complete_booking(data: JobCompleteData):
         db.close()
 
 
-@router.get("/booking/{booking_id}/summary", dependencies=[Depends(get_current_user)])
-def get_booking_summary(booking_id: int):
+@router.get("/booking/{booking_id}/summary")
+def get_booking_summary(booking_id: int, current: User = Depends(get_current_user)):
     db = SessionLocal()
     try:
         booking = db.query(Booking).filter(Booking.id == booking_id).first()
         if not booking:
             raise HTTPException(status_code=404, detail="Booking not found")
+
+        # Only the two parties on the booking may view its payslip.
+        if current.id not in (booking.customer_id, booking.worker_id):
+            raise HTTPException(status_code=403, detail="This booking is not yours")
 
         worker = db.query(User).filter(User.id == booking.worker_id).first()
         hourly_rate = (
