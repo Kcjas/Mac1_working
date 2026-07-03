@@ -46,7 +46,7 @@ def get_upcoming_jobs(user_id: int, current: User = Depends(get_current_user)):
     try:
         jobs = db.query(Booking).filter(
             Booking.customer_id == user_id,
-            Booking.status == "pending"
+            Booking.status.in_(["pending", "in_progress", "awaiting_costs", "awaiting_confirmation"]),
         ).order_by(Booking.date, Booking.time).all()
 
         unread = _unread_counts(db, [j.id for j in jobs], viewer_id=user_id)
@@ -54,6 +54,13 @@ def get_upcoming_jobs(user_id: int, current: User = Depends(get_current_user)):
         result = []
         for job in jobs:
             worker = db.query(User).filter(User.id == job.worker_id).first()
+
+            # Expose only the PIN relevant to the current stage, and only to this
+            # customer (this endpoint is the sole place a PIN leaves the server).
+            # The worker reads it from the customer out loud to advance the job.
+            start_pin = job.start_pin if job.status == "pending" else None
+            complete_pin = job.complete_pin if job.status == "in_progress" else None
+
             result.append({
                 "booking_id": job.id,
                 "worker_id": job.worker_id,
@@ -62,6 +69,10 @@ def get_upcoming_jobs(user_id: int, current: User = Depends(get_current_user)):
                 "address": job.address,
                 "date": job.date.strftime("%Y-%m-%d"),
                 "time": job.time.strftime("%H:%M"),
+                "status": job.status,
+                "started_at": job.started_at.isoformat() if job.started_at else None,
+                "start_pin": start_pin,
+                "complete_pin": complete_pin,
                 "unread_count": unread.get(job.id, 0),
             })
         return result

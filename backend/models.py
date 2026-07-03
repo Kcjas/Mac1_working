@@ -44,13 +44,22 @@ class Booking(Base):
     address = Column(String)
     date = Column(Date)
     time = Column(Time)
+    # Lifecycle: pending -> in_progress -> awaiting_costs -> awaiting_confirmation -> completed
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)  # set when the start PIN is verified; timer anchor
     completed_at = Column(DateTime, nullable=True)  # set when status -> "completed"; anchors chat auto-close
     chat_force_open = Column(Boolean, default=False)  # admin override to reopen chat after the 7-day window
-    time_taken = Column(Float, default=0.0)
-    extra_cost = Column(Float, default=0.0)
+    time_taken = Column(Float, default=0.0)  # measured hours = completed - started; set at /complete
+    extra_cost = Column(Float, default=0.0)  # sum of `extras`; set at /finalize
     extra_reason = Column(String, default="")
+
+    # PIN-verified completion flow. PINs are shown only to the customer (read aloud
+    # on-site) and never returned to the worker by any endpoint.
+    start_pin = Column(String, nullable=True)
+    complete_pin = Column(String, nullable=True)
+    extras = Column(String, nullable=True)  # JSON list of {"reason": str, "cost": float}
+    pin_attempts = Column(Integer, default=0)  # wrong-PIN counter; locked at 5
 
     customer = relationship("User", foreign_keys=[customer_id])
     worker = relationship("User", foreign_keys=[worker_id])

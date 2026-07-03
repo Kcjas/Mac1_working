@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../services/auth_http.dart';
-import 'dart:convert';
-import '../config/api_config.dart';
+import '../services/api_service.dart';
 
+/// Worker's itemized additional-cost form, shown after the completion PIN stops
+/// the timer. Each line is a reason + amount; submitting sends the bill to the
+/// customer for approval (`/booking/{id}/finalize`). Duration is no longer
+/// entered here — it is measured by the server timer.
 class CompletedJobPage extends StatefulWidget {
   final int booking_id;
   final int userId;
@@ -14,70 +15,77 @@ class CompletedJobPage extends StatefulWidget {
   State<CompletedJobPage> createState() => _CompletedJobPageState();
 }
 
+class _CostRow {
+  final TextEditingController reason = TextEditingController();
+  final TextEditingController cost = TextEditingController();
+  void dispose() {
+    reason.dispose();
+    cost.dispose();
+  }
+}
+
 class _CompletedJobPageState extends State<CompletedJobPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _durationController = TextEditingController();
-  final _costController = TextEditingController();
-  final _reasonController = TextEditingController();
+  final List<_CostRow> _rows = [];
   bool _isSubmitting = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _rows.add(_CostRow()); // start with one (optional) line
+  }
+
+  void _addRow() => setState(() => _rows.add(_CostRow()));
+
+  void _removeRow(int i) {
+    setState(() {
+      _rows[i].dispose();
+      _rows.removeAt(i);
+    });
+  }
+
   Future<void> _submit() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isSubmitting = true;
-      });
-
-      try {
-        final baseUrl = await ApiConfig.getBaseUrl();
-        final url = Uri.parse("$baseUrl/booking/complete");
-        final response = await AuthHttp.post(
-          url,
-          headers: {"Content-Type": "application/json"},
-          body: jsonEncode({
-            "booking_id": widget.booking_id,
-            "duration_hours": double.parse(_durationController.text),
-            "additional_cost": double.parse(_costController.text),
-            "reason": _reasonController.text,
-          }),
-        );
-
-        if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Job marked as completed!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          final resData = jsonDecode(response.body);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Error: ${resData["detail"]}"),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error: $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      } finally {
-        setState(() {
-          _isSubmitting = false;
-        });
+    // Build the extras list. A row counts only if a reason was entered; each such
+    // row must have a valid non-negative cost.
+    final extras = <Map<String, dynamic>>[];
+    for (final r in _rows) {
+      final reason = r.reason.text.trim();
+      final costText = r.cost.text.trim();
+      if (reason.isEmpty && costText.isEmpty) continue;
+      if (reason.isEmpty) {
+        _snack("Every cost needs a reason", Colors.red);
+        return;
       }
+      final cost = double.tryParse(costText);
+      if (cost == null || cost < 0) {
+        _snack("Enter a valid amount for '$reason'", Colors.red);
+        return;
+      }
+      extras.add({"reason": reason, "cost": cost});
     }
+
+    setState(() => _isSubmitting = true);
+    try {
+      await ApiService.finalizeJob(widget.booking_id, extras);
+      if (!mounted) return;
+      _snack("Bill sent to the customer for approval", Colors.green);
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      _snack("$e".replaceFirst('Exception: ', ''), Colors.red);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  void _snack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
   @override
   void dispose() {
-    _durationController.dispose();
-    _costController.dispose();
-    _reasonController.dispose();
+    for (final r in _rows) {
+      r.dispose();
+    }
     super.dispose();
   }
 
@@ -86,157 +94,101 @@ class _CompletedJobPageState extends State<CompletedJobPage> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text("Complete Job"),
+        title: const Text("Additional Costs"),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black87,
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            "Add any extra costs (materials, parts). Leave empty if there are none. "
+            "The customer reviews the full bill before it's confirmed.",
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 16),
+          ...List.generate(_rows.length, (i) => _costRowCard(i)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _addRow,
+            icon: const Icon(Icons.add),
+            label: const Text("Add another cost"),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.black87,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isSubmitting ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF4D00),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade400,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      height: 20, width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+                    )
+                  : const Text("Send Bill to Customer",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _costRowCard(int i) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Job Details",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _durationController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: "Duration (hours)",
-                        prefixIcon: Icon(Icons.access_time, color: Colors.grey.shade600),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.black87, width: 2),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return "Enter Duration";
-                        final duration = double.tryParse(value);
-                        if (duration == null || duration <= 0) return "Enter Valid Number";
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _costController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: "Total Additional Cost (₹)",
-                        prefixIcon: Icon(Icons.attach_money, color: Colors.grey.shade600),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.black87, width: 2),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return "Enter cost";
-                        final number = double.tryParse(value);
-                        if (number == null || number < 0) return "Enter valid number";
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _reasonController,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        labelText: "Reason for cost",
-                        hintText: "If multiple items, provide cost for each reason",
-                        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                        prefixIcon: Icon(Icons.description, color: Colors.grey.shade600),
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.black87, width: 2),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return "Enter reason";
-                        return null;
-                      },
-                    ),
-                  ],
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: _rows[i].reason,
+                decoration: const InputDecoration(
+                  labelText: "Reason",
+                  border: OutlineInputBorder(),
+                  isDense: true,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black87,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.shade400,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  elevation: 0,
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _rows[i].cost,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: "Amount (₹)",
+                  border: OutlineInputBorder(),
+                  isDense: true,
                 ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text(
-                        "Submit & Complete Job",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
               ),
             ),
+            if (_rows.length > 1)
+              IconButton(
+                onPressed: () => _removeRow(i),
+                icon: Icon(Icons.close, color: Colors.grey.shade500),
+              ),
           ],
         ),
       ),

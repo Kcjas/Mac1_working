@@ -24,6 +24,109 @@ class _CustomerUpcomingBookingsPageState extends State<CustomerUpcomingBookingsP
     return ApiService.fetchCustomerUpcomingJobs(userId);
   }
 
+  void _refresh() => setState(() => _upcomingJobs = fetchUpcomingJobs(widget.userId));
+
+  /// Per-card section that reflects where the booking is in the completion flow:
+  /// shows the start code while pending, a button into the live timer while
+  /// in progress, and a "Review bill" button once the worker submits the bill.
+  Widget _statusSection(Map<String, dynamic> job) {
+    final status = job['status']?.toString() ?? 'pending';
+    switch (status) {
+      case 'in_progress':
+        return Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.timer),
+              label: const Text("View live job"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF4D00),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              onPressed: () {
+                final startedAt = job['started_at']?.toString();
+                if (startedAt == null) return;
+                Navigator.pushNamed(context, '/jobInProgress', arguments: {
+                  'bookingId': job['booking_id'],
+                  'userId': widget.userId,
+                  'isWorker': false,
+                  'startedAt': startedAt,
+                  'jobTitle': job['job-title'] ?? 'Job',
+                  'otherName': job['worker_name'] ?? 'Worker',
+                  'completePin': job['complete_pin'],
+                }).then((_) => _refresh());
+              },
+            ),
+          ),
+        );
+      case 'awaiting_costs':
+        return Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: Text(
+            "Worker is adding the final costs…",
+            style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+          ),
+        );
+      case 'awaiting_confirmation':
+        return Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.receipt_long),
+              label: const Text("Review bill"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black87,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.pushNamed(context, '/confirmBill', arguments: {
+                'bookingId': job['booking_id'],
+                'userId': widget.userId,
+              }).then((_) => _refresh()),
+            ),
+          ),
+        );
+      case 'pending':
+      default:
+        final startPin = job['start_pin']?.toString();
+        if (startPin == null) return const SizedBox.shrink();
+        return _pinCard("Give this start code to the worker", startPin);
+    }
+  }
+
+  Widget _pinCard(String label, String pin) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF4D00).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFF4D00).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TextStyle(color: Colors.grey.shade800, fontSize: 13))),
+          Text(
+            pin,
+            style: const TextStyle(
+              color: Color(0xFFFF4D00),
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -224,6 +327,7 @@ class _CustomerUpcomingBookingsPageState extends State<CustomerUpcomingBookingsP
                               ),
                             ],
                           ),
+                      _statusSection(job),
                     ],
                   ),
                 ),

@@ -104,9 +104,11 @@ def get_worker_profile(user_id: int):
 def get_pending_jobs(worker_id: int, current: User = Depends(require_worker)):
     _require_self_worker(worker_id, current)
     db = SessionLocal()
+    # All not-yet-finished jobs, so the worker can drive each through the
+    # start -> in_progress -> awaiting_costs -> awaiting_confirmation flow.
     jobs = db.query(Booking).filter(
         Booking.worker_id == worker_id,
-        Booking.status == "pending"
+        Booking.status.in_(["pending", "in_progress", "awaiting_costs", "awaiting_confirmation"]),
     ).order_by(Booking.date, Booking.time).all()
 
     unread = _unread_counts(db, [j.id for j in jobs], viewer_id=worker_id)
@@ -121,6 +123,8 @@ def get_pending_jobs(worker_id: int, current: User = Depends(require_worker)):
             "time": job.time.strftime("%H:%M"),
             "customer_name": customer.name if customer else "Unknown",
             "booking_id": job.id,
+            "status": job.status,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
             "unread_count": unread.get(job.id, 0),
         })
 

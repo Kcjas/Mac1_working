@@ -15,6 +15,8 @@ import 'Pages/booking.dart';
 import 'Pages/service_workers.dart';
 import 'Pages/customerhomepage.dart';
 import 'Pages/Completed_jobs_page.dart';
+import 'Pages/job_in_progress.dart';
+import 'Pages/confirm_bill_page.dart';
 import 'Pages/customercompletedjobs.dart';
 import 'Pages/finalPaySlip.dart';
 import 'Pages/Rating.dart';
@@ -299,6 +301,38 @@ class MyApp extends StatelessWidget {
               );
             }
             return _errorRoute("Invalid args for /completedJobs");
+
+          case '/jobInProgress':
+            if (args is Map<String, dynamic> && args['startedAt'] != null) {
+              // Backend sends naive-UTC ISO timestamps (no 'Z'); treat them as UTC
+              // so the timer isn't skewed by the device's timezone offset.
+              final raw = args['startedAt'].toString();
+              final hasTz = raw.endsWith('Z') || RegExp(r'[+-]\d\d:?\d\d$').hasMatch(raw);
+              final startedAt = DateTime.parse(hasTz ? raw : '${raw}Z').toLocal();
+              return MaterialPageRoute(
+                builder: (_) => JobInProgressPage(
+                  bookingId: args['bookingId'] ?? 0,
+                  userId: args['userId'] ?? 0,
+                  isWorker: args['isWorker'] == true,
+                  startedAt: startedAt,
+                  jobTitle: args['jobTitle']?.toString() ?? 'Job',
+                  otherName: args['otherName']?.toString() ?? '',
+                  completePin: args['completePin']?.toString(),
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /jobInProgress");
+
+          case '/confirmBill':
+            if (args is Map<String, dynamic>) {
+              return MaterialPageRoute(
+                builder: (_) => ConfirmBillPage(
+                  bookingId: args['bookingId'] ?? 0,
+                  userId: args['userId'] ?? 0,
+                ),
+              );
+            }
+            return _errorRoute("Invalid args for /confirmBill");
 
           case '/customerCompletedJobs':
             if (args is int) {

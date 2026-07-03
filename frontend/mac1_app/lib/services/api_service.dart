@@ -125,5 +125,72 @@ class ApiService {
     }
   }
 
+  // ----- PIN-verified completion flow -----
+
+  /// Extracts the backend's `detail` message from an error response, falling
+  /// back to a generic message so the UI always has something to show.
+  static String _detail(http.Response res, String fallback) {
+    try {
+      final body = json.decode(res.body);
+      if (body is Map && body['detail'] != null) return body['detail'].toString();
+    } catch (_) {}
+    return fallback;
+  }
+
+  /// Worker enters the customer's start PIN. Returns the response body (incl.
+  /// `started_at`) on success; throws with the backend detail on failure.
+  static Future<Map<String, dynamic>> startJob(int bookingId, String pin) async {
+    final url = await baseUrl;
+    final res = await AuthHttp.post(
+      Uri.parse("$url/booking/$bookingId/start"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"pin": pin}),
+    );
+    if (res.statusCode == 200) return json.decode(res.body) as Map<String, dynamic>;
+    throw Exception(_detail(res, "Could not start the job"));
+  }
+
+  /// Worker enters the customer's completion PIN to stop the timer. Returns the
+  /// response body (incl. measured `time_taken`) on success.
+  static Future<Map<String, dynamic>> completeJob(int bookingId, String pin) async {
+    final url = await baseUrl;
+    final res = await AuthHttp.post(
+      Uri.parse("$url/booking/$bookingId/complete"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"pin": pin}),
+    );
+    if (res.statusCode == 200) return json.decode(res.body) as Map<String, dynamic>;
+    throw Exception(_detail(res, "Could not complete the job"));
+  }
+
+  /// Worker submits the itemized additional costs (each `{reason, cost}`).
+  static Future<Map<String, dynamic>> finalizeJob(
+      int bookingId, List<Map<String, dynamic>> extras) async {
+    final url = await baseUrl;
+    final res = await AuthHttp.post(
+      Uri.parse("$url/booking/$bookingId/finalize"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"extras": extras}),
+    );
+    if (res.statusCode == 200) return json.decode(res.body) as Map<String, dynamic>;
+    throw Exception(_detail(res, "Could not submit the bill"));
+  }
+
+  /// Customer approves the final bill, completing the booking.
+  static Future<Map<String, dynamic>> confirmBooking(int bookingId) async {
+    final url = await baseUrl;
+    final res = await AuthHttp.post(Uri.parse("$url/booking/$bookingId/confirm"));
+    if (res.statusCode == 200) return json.decode(res.body) as Map<String, dynamic>;
+    throw Exception(_detail(res, "Could not confirm the booking"));
+  }
+
+  /// Booking summary/payslip — also carries `status` and parsed `extras`, so the
+  /// customer's waiting screen can poll it.
+  static Future<Map<String, dynamic>> fetchBookingSummary(int bookingId) async {
+    final url = await baseUrl;
+    final res = await AuthHttp.get(Uri.parse("$url/booking/$bookingId/summary"));
+    if (res.statusCode == 200) return json.decode(res.body) as Map<String, dynamic>;
+    throw Exception(_detail(res, "Could not load the booking summary"));
+  }
 }
 

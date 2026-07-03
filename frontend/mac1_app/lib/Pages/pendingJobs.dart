@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_http.dart';
+import '../services/api_service.dart';
 import 'dart:convert';
 import '../config/api_config.dart';
 import 'widgets/chat_message_button.dart';
@@ -32,6 +33,114 @@ class _PendingJobsPageState extends State<PendingJobsPage> {
     } else {
       throw Exception("Failed to load jobs");
     }
+  }
+
+  void _refresh() => setState(() => _jobsFuture = fetchPendingJobs());
+
+  /// The per-card primary action depends on where the booking is in the flow.
+  Widget _buildAction(Map<String, dynamic> job) {
+    final status = job['status']?.toString() ?? 'pending';
+    final bookingId = job['booking_id'] as int?;
+    switch (status) {
+      case 'in_progress':
+        return _filledButton("Resume Job", const Color(0xFFFF4D00),
+            () => _openInProgress(job));
+      case 'awaiting_costs':
+        return _filledButton("Enter Costs", Colors.black87, () {
+          Navigator.pushNamed(context, '/completedJobs',
+              arguments: {'booking_id': bookingId, 'userId': widget.userId}).then((_) => _refresh());
+        });
+      case 'awaiting_confirmation':
+        return _filledButton("Waiting for customer", Colors.grey.shade400, null);
+      case 'pending':
+      default:
+        return _filledButton("Start Job", Colors.black87, () => _startJob(job));
+    }
+  }
+
+  Widget _filledButton(String label, Color color, VoidCallback? onPressed) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: Colors.grey.shade300,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        elevation: 0,
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+    );
+  }
+
+  Future<void> _startJob(Map<String, dynamic> job) async {
+    final bookingId = job['booking_id'] as int?;
+    if (bookingId == null) return;
+    final pin = await _askStartPin();
+    if (pin == null || pin.isEmpty) return;
+    try {
+      final res = await ApiService.startJob(bookingId, pin);
+      if (!mounted) return;
+      _gotoInProgress(job, res['started_at']?.toString());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("$e".replaceFirst('Exception: ', '')),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  void _openInProgress(Map<String, dynamic> job) =>
+      _gotoInProgress(job, job['started_at']?.toString());
+
+  void _gotoInProgress(Map<String, dynamic> job, String? startedAt) {
+    if (startedAt == null) {
+      _refresh();
+      return;
+    }
+    Navigator.pushNamed(context, '/jobInProgress', arguments: {
+      'bookingId': job['booking_id'],
+      'userId': widget.userId,
+      'isWorker': true,
+      'startedAt': startedAt,
+      'jobTitle': job['job_title'] ?? 'Job',
+      'otherName': job['customer_name'] ?? 'Customer',
+    }).then((_) => _refresh());
+  }
+
+  Future<String?> _askStartPin() {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Start code"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Ask the customer for their start code and enter it below."),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                hintText: "6-digit code",
+                border: OutlineInputBorder(),
+                counterText: "",
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text("Start"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -171,33 +280,7 @@ class _PendingJobsPageState extends State<PendingJobsPage> {
                             ).then((_) => setState(() => _jobsFuture = fetchPendingJobs())),
                           ),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  '/completedJobs',
-                                  arguments: {
-                                    'booking_id': job['booking_id'],
-                                    'userId': widget.userId
-                                  },
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black87,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: const Text(
-                                "Mark as Complete",
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                          ),
+                          Expanded(child: _buildAction(job)),
                         ],
                       ),
                     ],
